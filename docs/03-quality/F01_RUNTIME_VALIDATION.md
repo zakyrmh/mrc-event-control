@@ -1,6 +1,6 @@
 # Validasi Runtime F-01
 
-Tanggal pengujian: 18 Oktober 2026 UTC. Dokumen ini mencatat bukti implementasi [001 F-01](../../specs/001-team-management/tasks.md), bukan persetujuan QA atau kesiapan rilis.
+Tanggal pengujian: 18 Oktober 2026 UTC. Dokumen ini mencatat bukti implementasi dan review independen [001 F-01](../../specs/001-team-management/tasks.md), bukan kesiapan rilis.
 
 ## Keputusan fondasi
 
@@ -34,5 +34,8 @@ Lockfile terdiri dari dua dokumen YAML yang dikelola pnpm 12: dokumen pertama me
 - Root test tetap placeholder dan dilaporkan gagal; server test bukan bukti integrasi API, migrasi, SQLite durability, atau E2E.
 - D-14/D-15 tetap **[NEEDS CONFIRMATION]**. Baseline ini tidak menyetujui hardware, target recovery, media backup, format impor, akun, atau retensi.
 - Tidak ada database acara, schema, atau migrasi yang dibuat maupun diubah.
+- Audit dependency saat review melaporkan advisory transitif Prisma (dua high dan satu moderate). Temuan ini perlu ditriase sebelum rilis, tetapi tidak membatalkan bukti runtime F-01 dan bukan izin upgrade dependency tanpa tugas terpisah.
+- Guard versi memakai parsing major numerik; review mencatat suffix setelah major dapat diterima. Pemanggil produksi memberikan `process.versions.node`, tetapi parser yang lebih ketat tetap merupakan hardening lanjutan.
+- Instalasi offline dari cache QA kosong berhenti pada metadata `pglite-tools`; setelah cache dipanaskan, frozen offline install lulus. Karena itu bukti tidak mencakup cold-cache atau pemindahan cache ke laptop acara.
 
-Checkbox F-01 tetap belum dicentang sampai review independen SENTINEL menerima bukti ini. F-02–F-05 tidak boleh dimulai melalui perubahan ini.
+Review independen SENTINEL menyatakan **PASS** pada commit `aaee24f` tanggal 18 Oktober 2026. Checkbox F-01 dicentang berdasarkan bukti tersebut. Gate F-01 tidak lagi menahan F-02, tetapi seluruh batas dan risiko di atas tetap berlaku dan bukan klaim kesiapan rilis.

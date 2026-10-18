@@ -6,7 +6,7 @@ Daftar pekerjaan **belum dikerjakan**, bukan laporan implementasi. Cakupan TM-01
 
 ## Fondasi Bersama
 
-- [ ] F-01 — Asesmen runtime/lockfile/izin native/versi TS dan aktifkan strict melalui perubahan terpisah. Selesai: kompatibilitas Node/OS diuji, risiko versi dicatat, lint/typecheck relevan lulus, runner unit minimum tersedia sebelum validasi F-02–F-05.
+- [x] F-01 — Asesmen runtime/lockfile/izin native/versi TS dan aktifkan strict melalui perubahan terpisah. Selesai: kompatibilitas Node/OS diuji, risiko versi dicatat, lint/typecheck relevan lulus, runner unit minimum tersedia sebelum validasi F-02–F-05. Bukti Linux dan batas portabilitas dicatat di [validasi runtime F-01](../../docs/03-quality/F01_RUNTIME_VALIDATION.md); review independen SENTINEL lulus 18 Oktober 2026.
 - [ ] F-02 — Setelah F-01, buat paket `packages/shared` dan DTO/error/enum awal Zod. Selesai: ekspor/batas browser-server dan validasi input diuji.
 - [ ] F-03 — Setelah F-02, bangun Fastify bootstrap, health/readiness/error envelope dan script dev/build/start yang nyata. Selesai: server uji berjalan dan kegagalan startup jelas; bukan launcher hari-H final.
 - [ ] F-04 — Setelah F-03, buat schema/migrasi SQLite awal dan lifecycle koneksi DB. Selesai: fresh DB/salinan diuji, FK/durability ditinjau, backup salinan tersedia sebelum migrasi nyata.
