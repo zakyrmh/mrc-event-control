@@ -1,0 +1,54 @@
+# Dependensi dan cache paket
+node_modules/
+.pnpm-store/
+
+# Hasil build, cache, dan laporan pengujian
+dist/
+dist-ssr/
+build/
+.vite/
+.cache/
+coverage/
+playwright-report/
+playwright/.cache/
+test-results/
+*.tsbuildinfo
+
+# Konfigurasi lokal dan rahasia; template tetap dilacak
+.env
+.env.*
+!.env.example
+!.env.*.example
+!.env.sample
+!.env.template
+*.local
+/.aws/
+/.codex/
+
+# Data SQLite dan cadangan operasional lokal
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+/data/
+/backups/
+
+# Log aplikasi dan alat pengembangan
+logs/
+*.log
+*.pid
+
+# Pengaturan editor dan berkas sementara sistem
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
