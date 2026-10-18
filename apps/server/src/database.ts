@@ -1,6 +1,14 @@
 import { createHash } from 'node:crypto'
-import { readFile, stat, unlink } from 'node:fs/promises'
-import { isAbsolute, resolve } from 'node:path'
+import {
+  mkdtemp,
+  open,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  stat,
+} from 'node:fs/promises'
+import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
 import { PrismaClient } from '@prisma/client'
@@ -85,59 +93,106 @@ export class DatabaseConnection {
 export async function createVerifiedBackup(
   sourcePath: string,
   destinationPath: string,
+  approvedBackupRoot: string,
   expectedVersions: DatabaseVersions,
   writersStopped: boolean,
 ): Promise<VerifiedBackup> {
   if (!writersStopped) {
     throw new Error('Backup requires a maintenance window with writers stopped')
   }
-  if (resolve(sourcePath) === resolve(destinationPath)) {
+  const [canonicalSource, canonicalBackupRoot, canonicalDestinationDirectory] =
+    await Promise.all([
+      realpath(sourcePath),
+      realpath(approvedBackupRoot),
+      realpath(dirname(destinationPath)),
+    ])
+  const destinationRelativeToRoot = relative(
+    canonicalBackupRoot,
+    canonicalDestinationDirectory,
+  )
+  if (
+    destinationRelativeToRoot === '..' ||
+    destinationRelativeToRoot.startsWith(`..${sep}`) ||
+    isAbsolute(destinationRelativeToRoot)
+  ) {
+    throw new Error('Backup destination must be inside the approved backup root')
+  }
+
+  const canonicalDestination = resolve(
+    canonicalDestinationDirectory,
+    basename(destinationPath),
+  )
+  if (canonicalSource === canonicalDestination) {
     throw new Error('Backup destination must differ from the source database')
   }
 
-  const source = new Database(sourcePath, { readonly: true, fileMustExist: true })
+  const temporaryDirectory = await mkdtemp(
+    resolve(canonicalDestinationDirectory, '.mrc-x-backup-'),
+  )
+  const temporaryPath = resolve(temporaryDirectory, 'candidate.db')
   try {
-    await source.backup(destinationPath)
-  } catch (error) {
-    await unlink(destinationPath).catch(() => undefined)
-    throw error
+    const source = new Database(sourcePath, {
+      readonly: true,
+      fileMustExist: true,
+    })
+    try {
+      await source.backup(temporaryPath)
+    } finally {
+      source.close()
+    }
+
+    const copy = new Database(temporaryPath, {
+      readonly: true,
+      fileMustExist: true,
+    })
+    try {
+      const integrity = copy.pragma('integrity_check', { simple: true })
+      if (integrity !== 'ok') {
+        throw new Error(`Backup integrity check failed: ${String(integrity)}`)
+      }
+
+      const version = copy
+        .prepare(
+          'SELECT "appVersion", "schemaVersion" FROM "EventConfig" LIMIT 1',
+        )
+        .get() as DatabaseVersions | undefined
+      if (
+        version?.appVersion !== expectedVersions.appVersion ||
+        version.schemaVersion !== expectedVersions.schemaVersion
+      ) {
+        throw new Error(
+          'Backup application/schema version pairing does not match',
+        )
+      }
+    } finally {
+      copy.close()
+    }
+
+    const temporaryFile = await open(temporaryPath, 'r')
+    try {
+      await temporaryFile.sync()
+    } finally {
+      await temporaryFile.close()
+    }
+    await rename(temporaryPath, canonicalDestination)
+    const destinationDirectory = await open(canonicalDestinationDirectory, 'r')
+    try {
+      await destinationDirectory.sync()
+    } finally {
+      await destinationDirectory.close()
+    }
+
+    const [contents, metadata] = await Promise.all([
+      readFile(canonicalDestination),
+      stat(canonicalDestination),
+    ])
+    return {
+      ...expectedVersions,
+      bytes: metadata.size,
+      destinationPath: canonicalDestination,
+      sha256: createHash('sha256').update(contents).digest('hex'),
+    }
   } finally {
-    source.close()
-  }
-
-  const copy = new Database(destinationPath, { readonly: true, fileMustExist: true })
-  try {
-    const integrity = copy.pragma('integrity_check', { simple: true })
-    if (integrity !== 'ok') {
-      throw new Error(`Backup integrity check failed: ${String(integrity)}`)
-    }
-
-    const version = copy
-      .prepare(
-        'SELECT "appVersion", "schemaVersion" FROM "EventConfig" LIMIT 1',
-      )
-      .get() as DatabaseVersions | undefined
-    if (
-      version?.appVersion !== expectedVersions.appVersion ||
-      version.schemaVersion !== expectedVersions.schemaVersion
-    ) {
-      throw new Error('Backup application/schema version pairing does not match')
-    }
-  } catch (error) {
-    copy.close()
-    await unlink(destinationPath).catch(() => undefined)
-    throw error
-  }
-  copy.close()
-
-  const [contents, metadata] = await Promise.all([
-    readFile(destinationPath),
-    stat(destinationPath),
-  ])
-  return {
-    ...expectedVersions,
-    bytes: metadata.size,
-    destinationPath,
-    sha256: createHash('sha256').update(contents).digest('hex'),
+    await rm(temporaryDirectory, { force: true, recursive: true })
   }
 }

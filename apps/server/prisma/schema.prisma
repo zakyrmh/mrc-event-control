@@ -40,8 +40,9 @@ model CompetitionGroup {
   createdAt  DateTime          @default(now())
   updatedAt  DateTime          @updatedAt
   category   Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  members    GroupMembership[]
+  members    GroupMembership[] @relation("MembershipGroupCategory")
 
+  @@unique([id, categoryId])
   @@unique([categoryId, name])
   @@index([categoryId])
   @@map("Group")
@@ -58,8 +59,9 @@ model Team {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
   category    Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  memberships GroupMembership[]
+  memberships GroupMembership[] @relation("MembershipTeamCategory")
 
+  @@unique([id, categoryId])
   @@unique([categoryId, code])
   @@index([categoryId])
 }
@@ -70,8 +72,8 @@ model GroupMembership {
   groupId    String
   teamId     String
   createdAt  DateTime         @default(now())
-  group      CompetitionGroup @relation(fields: [groupId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  team       Team             @relation(fields: [teamId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  group      CompetitionGroup @relation("MembershipGroupCategory", fields: [groupId, categoryId], references: [id, categoryId], onDelete: Restrict, onUpdate: Cascade)
+  team       Team             @relation("MembershipTeamCategory", fields: [teamId, categoryId], references: [id, categoryId], onDelete: Restrict, onUpdate: Cascade)
 
   @@unique([categoryId, teamId])
   @@unique([groupId, teamId])

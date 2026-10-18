@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, describe, it } from 'node:test'
@@ -104,6 +104,34 @@ describe('SQLite foundation', () => {
     )
   })
 
+  it('rejects group membership across category boundaries', async () => {
+    await connection.client.category.create({
+      data: { id: 'category-b', code: 'LFS', label: 'Line Follower Senior' },
+    })
+    await connection.client.competitionGroup.create({
+      data: { id: 'group-a', categoryId: 'category-a', name: 'Group A' },
+    })
+    await connection.client.team.create({
+      data: {
+        id: 'team-category-b',
+        categoryId: 'category-b',
+        code: 'T-02',
+        name: 'Team Category B',
+      },
+    })
+
+    await assert.rejects(
+      connection.client.groupMembership.create({
+        data: {
+          id: 'invalid-membership',
+          categoryId: 'category-a',
+          groupId: 'group-a',
+          teamId: 'team-category-b',
+        },
+      }),
+    )
+  })
+
   it('keeps audit entries append-only', async () => {
     await connection.client.auditEntry.create({
       data: {
@@ -158,7 +186,13 @@ describe('SQLite foundation', () => {
       schemaVersion: '20261018190000',
     }
     await assert.rejects(
-      createVerifiedBackup(databasePath, backupPath, expectedVersions, false),
+      createVerifiedBackup(
+        databasePath,
+        backupPath,
+        directory,
+        expectedVersions,
+        false,
+      ),
       /maintenance window/,
     )
 
@@ -166,6 +200,7 @@ describe('SQLite foundation', () => {
     const result = await createVerifiedBackup(
       databasePath,
       backupPath,
+      directory,
       expectedVersions,
       true,
     )
@@ -180,11 +215,46 @@ describe('SQLite foundation', () => {
       restored.client.auditEntry.count(),
     ])
     assert.equal(config?.appVersion, expectedVersions.appVersion)
-    assert.equal(teamCount, 1)
+    assert.equal(teamCount, 2)
     assert.equal(auditCount, 1)
     await restored.disconnect()
 
     connection = new DatabaseConnection(`file:${databasePath}`)
     await connection.connect()
+  })
+
+  it('preserves the last known good backup when verification fails', async () => {
+    const backupPath = join(directory, 'last-known-good.db')
+    const priorContents = 'last-known-good'
+    await writeFile(backupPath, priorContents)
+    await connection.disconnect()
+
+    await assert.rejects(
+      createVerifiedBackup(
+        databasePath,
+        backupPath,
+        directory,
+        { appVersion: 'wrong', schemaVersion: 'wrong' },
+        true,
+      ),
+      /version pairing/,
+    )
+    assert.equal(await readFile(backupPath, 'utf8'), priorContents)
+
+    connection = new DatabaseConnection(`file:${databasePath}`)
+    await connection.connect()
+  })
+
+  it('rejects backup destinations outside the approved root', async () => {
+    await assert.rejects(
+      createVerifiedBackup(
+        databasePath,
+        join(directory, '..', 'outside.db'),
+        directory,
+        { appVersion: '1.0.0', schemaVersion: '20261018190000' },
+        true,
+      ),
+      /approved backup root/,
+    )
   })
 })

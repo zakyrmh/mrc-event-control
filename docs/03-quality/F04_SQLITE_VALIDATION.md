@@ -12,19 +12,20 @@ disentuh.
 | Schema master/auth | F-04, TM-01, TM-04 | PASS | Migration membentuk EventConfig, Category, Group, Team, GroupMembership, User, dan Session dengan FK/unique/revision |
 | Fondasi integritas operasi | F-04, TM-05, TM-07, R-11, R-15, H-05 | PASS (schema) | OperationLedger, CommandReceipt, AuditEntry append-only, dan OutboxEvent terbentuk; perilaku UoW/OP tetap scope F-05 |
 | Migrasi fresh DB | F-04 | PASS | `prisma migrate deploy` menerapkan satu migration ke file baru di `/tmp` |
-| Constraint SQLite nyata | F-04, AC-01, AC-18, TC-24 | PASS | Test driver nyata menolak FK orphan dan kode tim duplikat; audit update/delete ditolak |
-| Durability/lifecycle | F-04, R-11, Q-08, AC-24 | PASS (fondasi) | Test memeriksa FK ON, WAL, synchronous FULL, busy timeout, disconnect/reconnect, dan data commit bertahan |
-| Backup/restore copy | F-04, R-13, AC-16, TC-36 | PASS (copy terisolasi) | Writer dihentikan, SQLite backup API digunakan, checksum/integrity/version pairing diverifikasi, lalu jumlah team/audit diperiksa setelah membuka salinan |
-| Fault injection penuh | AC-24/32/33/36, TC-24/32/33/36 | NOT RUN untuk skenario lintas modul | Ledger UoW, timer, storage gate, event session, media kedua, dan pengukuran RPO/RTO bergantung pada F-05/002/003 serta keputusan D-14/D-15 |
+| Constraint SQLite nyata | F-04, TM-01, AC-01 | PASS (fondasi) | Test driver nyata menolak FK orphan, kode tim duplikat, dan membership lintas kategori; audit update/delete ditolak. CRUD/import/authorization tetap di luar F-04 |
+| Durability/lifecycle | F-04, R-11, Q-08 | PASS (fondasi) | Test memeriksa FK ON, WAL, synchronous FULL, busy timeout, disconnect/reconnect, dan data commit bertahan; recovery gate R-11 tetap NOT RUN |
+| Backup/restore copy | F-04, R-13, AC-16 | PASS (fondasi copy terisolasi) | Writer dihentikan; candidate dibuat di direktori sementara dalam root yang disetujui, diverifikasi sebelum atomic rename, dan kegagalan mempertahankan cadangan lama. Restore salinan memeriksa versi serta jumlah team/audit |
+| Auth dan fault injection penuh | AC-18/24/32/33/36, TC-24/32/33/36 | NOT RUN/BLOCKED untuk skenario lintas modul | Auth boundary, ledger UoW, fault campaign, timer, storage gate, event session, manifest/media kedua, dan pengukuran RPO/RTO bergantung pada F-05/F-06/002/003 serta keputusan D-14/D-15 |
 
 ## Perintah dan Hasil
 
 - `pnpm install` — PASS; lockfile/workspace links konsisten, 331 entry lolos
   supply-chain policy, tanpa paket baru diunduh.
 - `pnpm --filter server typecheck` — PASS.
-- `pnpm --filter server test` — PASS, 14 test; 0 gagal. Enam test SQLite
-  nyata mencakup fresh schema, pragma durability, FK/unique, audit append-only,
-  restart persistence, serta backup/restore.
+- `pnpm --filter server test` — PASS, 17/17. Sembilan test SQLite nyata
+  mencakup fresh schema, pragma durability, FK/unique, penolakan membership
+  lintas kategori, audit append-only, restart persistence, backup/restore,
+  preservasi cadangan lama saat verifikasi gagal, dan pembatasan backup root.
 - `pnpm --filter server build` — PASS.
 - `pnpm --filter web lint` — PASS.
 - `pnpm --filter web build` — PASS.
@@ -34,6 +35,22 @@ disentuh.
   tidak tersedia. Pemeriksaan `PRAGMA integrity_check` yang setara dijalankan
   dan PASS melalui better-sqlite3 dalam test suite.
 - `git diff --check` — PASS.
+
+## Remediasi QA Independen
+
+Verdict awal [ZAK-24](/ZAK/issues/ZAK-24) menemukan dua defect HIGH pada commit
+`a4a2866`: kategori membership tidak terikat ke kategori group/team dan failure
+backup menghapus destination existing. Remediasi menambahkan FK komposit
+`(groupId, categoryId)` serta `(teamId, categoryId)`. Backup sekarang membuat
+candidate unik hanya di dalam root backup yang disetujui, memeriksa integrity
+dan version pairing, melakukan fsync, lalu mempromosikannya dengan atomic
+rename. Failure hanya membersihkan direktori temporary milik invocation dan
+tes regresi membuktikan cadangan lama tetap byte-identik.
+
+Klaim acceptance juga dipersempit: AC-18 dan TC-24 bukan bukti constraint
+master; AC/TC-24/32/33/36 tetap NOT RUN atau BLOCKED sampai fault campaign dan
+modul dependennya tersedia. Bukti ini tidak mengklaim EventSession, manifest
+persisten, media kedua, RPO/RTO, auth boundary, atau readiness hari-H.
 
 ## Batas dan Prosedur Aman
 

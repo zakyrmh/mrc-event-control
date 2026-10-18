@@ -54,8 +54,8 @@ CREATE TABLE "GroupMembership" (
   "groupId" TEXT NOT NULL,
   "teamId" TEXT NOT NULL,
   "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT "GroupMembership_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "Group" ("id") ON DELETE RESTRICT ON UPDATE CASCADE,
-  CONSTRAINT "GroupMembership_teamId_fkey" FOREIGN KEY ("teamId") REFERENCES "Team" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+  CONSTRAINT "GroupMembership_groupId_categoryId_fkey" FOREIGN KEY ("groupId", "categoryId") REFERENCES "Group" ("id", "categoryId") ON DELETE RESTRICT ON UPDATE CASCADE,
+  CONSTRAINT "GroupMembership_teamId_categoryId_fkey" FOREIGN KEY ("teamId", "categoryId") REFERENCES "Team" ("id", "categoryId") ON DELETE RESTRICT ON UPDATE CASCADE
 );
 
 CREATE TABLE "User" (
@@ -152,8 +152,10 @@ CREATE TABLE "BackupManifest" (
 
 CREATE UNIQUE INDEX "Category_code_key" ON "Category"("code");
 CREATE UNIQUE INDEX "Group_categoryId_name_key" ON "Group"("categoryId", "name");
+CREATE UNIQUE INDEX "Group_id_categoryId_key" ON "Group"("id", "categoryId");
 CREATE INDEX "Group_categoryId_idx" ON "Group"("categoryId");
 CREATE UNIQUE INDEX "Team_categoryId_code_key" ON "Team"("categoryId", "code");
+CREATE UNIQUE INDEX "Team_id_categoryId_key" ON "Team"("id", "categoryId");
 CREATE INDEX "Team_categoryId_idx" ON "Team"("categoryId");
 CREATE UNIQUE INDEX "GroupMembership_categoryId_teamId_key" ON "GroupMembership"("categoryId", "teamId");
 CREATE UNIQUE INDEX "GroupMembership_groupId_teamId_key" ON "GroupMembership"("groupId", "teamId");
