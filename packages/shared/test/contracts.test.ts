@@ -18,7 +18,7 @@ const teamAId = 'ff543b22-954d-492b-8e5f-bad12936f53c'
 const teamBId = '26642988-f4c8-4811-813d-eb191475ae37'
 
 describe('shared DTO contracts', () => {
-  it('matches the complete match status and phase state-machine enums', () => {
+  it('accepts every documented match status and rejects undocumented values', () => {
     const matchStatuses = [
       'SCHEDULED',
       'PREPARING',
@@ -29,6 +29,17 @@ describe('shared DTO contracts', () => {
       'CORRECTION_PENDING',
       'CANCELLED',
     ]
+
+    assert.deepEqual(matchStatusSchema.options, matchStatuses)
+    for (const status of matchStatuses) {
+      assert.equal(matchStatusSchema.safeParse(status).success, true, status)
+    }
+    for (const status of ['ACTIVE', 'scheduled', 'UNKNOWN', '', null]) {
+      assert.equal(matchStatusSchema.safeParse(status).success, false, String(status))
+    }
+  })
+
+  it('accepts every documented match phase and rejects undocumented values', () => {
     const matchPhases = [
       'PRE_MATCH',
       'CALLING',
@@ -41,9 +52,13 @@ describe('shared DTO contracts', () => {
       'FINISHED',
     ]
 
-    assert.deepEqual(matchStatusSchema.options, matchStatuses)
     assert.deepEqual(matchPhaseSchema.options, matchPhases)
-    assert.equal(matchStatusSchema.safeParse('ACTIVE').success, false)
+    for (const phase of matchPhases) {
+      assert.equal(matchPhaseSchema.safeParse(phase).success, true, phase)
+    }
+    for (const phase of ['ACTIVE', 'pre_match', 'UNKNOWN', '', null]) {
+      assert.equal(matchPhaseSchema.safeParse(phase).success, false, String(phase))
+    }
   })
 
   it('accepts valid Feature 001 inputs', () => {
