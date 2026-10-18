@@ -1,0 +1,190 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model EventConfig {
+  id              String   @id
+  eventName       String
+  timezone        String
+  schemaVersion   String
+  appVersion      String
+  dataLocation    String
+  catalogRevision Int      @default(1)
+  storageEpoch    Int      @default(1)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Category {
+  id        String             @id
+  code      String             @unique
+  label     String
+  enabled   Boolean            @default(true)
+  revision  Int                @default(1)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  groups    CompetitionGroup[]
+  teams     Team[]
+}
+
+model CompetitionGroup {
+  id         String            @id
+  categoryId String
+  name       String
+  enabled    Boolean           @default(true)
+  revision   Int               @default(1)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  category   Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  members    GroupMembership[]
+
+  @@unique([categoryId, name])
+  @@index([categoryId])
+  @@map("Group")
+}
+
+model Team {
+  id          String            @id
+  categoryId  String
+  code        String
+  name        String
+  institution String?
+  archivedAt  DateTime?
+  revision    Int               @default(1)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  category    Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  memberships GroupMembership[]
+
+  @@unique([categoryId, code])
+  @@index([categoryId])
+}
+
+model GroupMembership {
+  id         String           @id
+  categoryId String
+  groupId    String
+  teamId     String
+  createdAt  DateTime         @default(now())
+  group      CompetitionGroup @relation(fields: [groupId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  team       Team             @relation(fields: [teamId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([categoryId, teamId])
+  @@unique([groupId, teamId])
+  @@index([groupId])
+  @@index([teamId])
+}
+
+model User {
+  id           String       @id
+  username     String       @unique
+  passwordHash String
+  role         String
+  enabled      Boolean      @default(true)
+  revision     Int          @default(1)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  sessions     Session[]
+  auditEntries AuditEntry[]
+}
+
+model Session {
+  id          String   @id
+  userId      String
+  sessionHash String   @unique
+  csrfHash    String
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model AuditEntry {
+  id                 String   @id
+  commandId          String?
+  actorId             String?
+  timestampUtc        DateTime @default(now())
+  action              String
+  resourceType        String
+  resourceId          String?
+  beforeJson          String?
+  afterJson           String?
+  reason              String?
+  authorityReference  String?
+  actor               User?    @relation(fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([commandId])
+  @@index([actorId])
+  @@index([resourceType, resourceId])
+  @@index([timestampUtc])
+}
+
+model OperationLedger {
+  id                String          @id
+  principalId       String
+  scope             String
+  idempotencyKey    String
+  payloadHash       String
+  targetId          String?
+  expectedRuntimeId String?
+  status            String
+  terminalCode      String?
+  receiptJson       String?
+  reservedAt        DateTime        @default(now())
+  terminalAt        DateTime?
+  receipt           CommandReceipt?
+
+  @@unique([principalId, scope, idempotencyKey])
+  @@index([status, reservedAt])
+}
+
+model CommandReceipt {
+  id          String          @id
+  ledgerId    String          @unique
+  responseJson String
+  committedAt DateTime        @default(now())
+  ledger      OperationLedger @relation(fields: [ledgerId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([committedAt])
+}
+
+model OutboxEvent {
+  eventId             String    @id
+  broadcastRevision   Int       @unique
+  aggregateType       String
+  aggregateId         String
+  type                 String
+  payloadPublicJson    String
+  committedAt          DateTime  @default(now())
+  dispatchedAt         DateTime?
+
+  @@index([dispatchedAt, committedAt])
+  @@index([aggregateType, aggregateId])
+}
+
+model BackupManifest {
+  backupId                String    @id
+  createdAt               DateTime  @default(now())
+  schemaVersion           String
+  appVersion              String
+  sha256                  String
+  fileSize                Int
+  lastCommittedCommandAt  DateTime?
+  lastCheckpointAt        DateTime?
+  backupCutCommandId      String?
+  backupCutCommandAt      DateTime?
+  eventSessionId          String?
+  eventSessionClosedAt    DateTime?
+  verifiedAt              DateTime?
+  copiedToSecondMediaAt   DateTime?
+  storageEpoch            Int
+  restoreLineage          String
+  verifyStatus            String
+}
