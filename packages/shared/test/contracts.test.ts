@@ -5,7 +5,9 @@ import {
   apiErrorEnvelopeSchema,
   categoryInputSchema,
   commandReceiptSchema,
+  matchPhaseSchema,
   matchScheduleInputSchema,
+  matchStatusSchema,
   paginationQuerySchema,
   teamInputSchema,
   userRoleSchema,
@@ -16,6 +18,34 @@ const teamAId = 'ff543b22-954d-492b-8e5f-bad12936f53c'
 const teamBId = '26642988-f4c8-4811-813d-eb191475ae37'
 
 describe('shared DTO contracts', () => {
+  it('matches the complete match status and phase state-machine enums', () => {
+    const matchStatuses = [
+      'SCHEDULED',
+      'PREPARING',
+      'IN_PROGRESS',
+      'PAUSED',
+      'POSTPONED',
+      'COMPLETED',
+      'CORRECTION_PENDING',
+      'CANCELLED',
+    ]
+    const matchPhases = [
+      'PRE_MATCH',
+      'CALLING',
+      'VERIFICATION',
+      'WARMUP',
+      'READY',
+      'COMPETITION',
+      'INTERMISSION',
+      'RESULT',
+      'FINISHED',
+    ]
+
+    assert.deepEqual(matchStatusSchema.options, matchStatuses)
+    assert.deepEqual(matchPhaseSchema.options, matchPhases)
+    assert.equal(matchStatusSchema.safeParse('ACTIVE').success, false)
+  })
+
   it('accepts valid Feature 001 inputs', () => {
     assert.equal(userRoleSchema.parse('OPERATOR'), 'OPERATOR')
     assert.deepEqual(categoryInputSchema.parse({

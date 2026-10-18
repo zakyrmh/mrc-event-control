@@ -5,7 +5,9 @@ export type UserRole = z.infer<typeof userRoleSchema>
 
 export const matchStatusSchema = z.enum([
   'SCHEDULED',
-  'ACTIVE',
+  'PREPARING',
+  'IN_PROGRESS',
+  'PAUSED',
   'POSTPONED',
   'COMPLETED',
   'CORRECTION_PENDING',
@@ -14,6 +16,7 @@ export const matchStatusSchema = z.enum([
 export type MatchStatus = z.infer<typeof matchStatusSchema>
 
 export const matchPhaseSchema = z.enum([
+  'PRE_MATCH',
   'CALLING',
   'VERIFICATION',
   'WARMUP',
@@ -21,6 +24,7 @@ export const matchPhaseSchema = z.enum([
   'COMPETITION',
   'INTERMISSION',
   'RESULT',
+  'FINISHED',
 ])
 export type MatchPhase = z.infer<typeof matchPhaseSchema>
 
