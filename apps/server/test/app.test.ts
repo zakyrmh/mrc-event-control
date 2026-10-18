@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { Writable } from 'node:stream'
 import { describe, it } from 'node:test'
 
 import { apiErrorEnvelopeSchema } from '@mrc-x/shared/server'
@@ -27,8 +28,8 @@ describe('server bootstrap', () => {
     const server = buildServer({
       readiness: () => ({
         ready: false,
-        reason: 'storage unavailable',
-        details: { storage: 'unavailable' },
+        reason: 'password=hunter2 SELECT * FROM users internal-stack',
+        details: { storage: 'SQLITE_BUSY at secret/path.ts:42' },
       }),
     })
 
@@ -37,9 +38,13 @@ describe('server bootstrap', () => {
     assert.equal(response.statusCode, 503)
     assert.deepEqual(response.json(), {
       status: 'not_ready',
-      reason: 'storage unavailable',
-      details: { storage: 'unavailable' },
+      reason: 'Kesiapan layanan belum terpenuhi.',
+      details: {},
     })
+    assert.doesNotMatch(
+      response.body,
+      /hunter2|SELECT|internal-stack|SQLITE_BUSY|secret\/path/,
+    )
 
     await server.close()
   })
@@ -78,7 +83,14 @@ describe('server bootstrap', () => {
   })
 
   it('does not expose internal error details in the response', async () => {
-    const server = buildServer()
+    let logs = ''
+    const logStream = new Writable({
+      write(chunk, _encoding, callback) {
+        logs += chunk.toString()
+        callback()
+      },
+    })
+    const server = buildServer({ logger: { stream: logStream } })
     server.get('/failure', async () => {
       throw new Error('password=hunter2 SELECT * FROM users internal-stack')
     })
@@ -89,6 +101,8 @@ describe('server bootstrap', () => {
     assert.equal(response.statusCode, 500)
     assert.equal(body.error.code, 'INTERNAL_ERROR')
     assert.doesNotMatch(response.body, /hunter2|SELECT|internal-stack/)
+    assert.match(logs, /Unhandled request error|INTERNAL_ERROR/)
+    assert.doesNotMatch(logs, /hunter2|SELECT|internal-stack/)
 
     await server.close()
   })

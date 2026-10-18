@@ -78,8 +78,8 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
     if (!result.ready) {
       return reply.code(503).send({
         status: 'not_ready',
-        reason: result.reason,
-        details: result.details ?? {},
+        reason: 'Kesiapan layanan belum terpenuhi.',
+        details: {},
       })
     }
 
@@ -115,7 +115,10 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
       )
     }
 
-    request.log.error({ err: error }, 'Unhandled request error')
+    request.log.error(
+      { requestId: request.id, code: 'INTERNAL_ERROR' },
+      'Unhandled request error',
+    )
     return reply.code(500).send(
       errorEnvelope(
         request.id,
