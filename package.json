@@ -9,6 +9,9 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
@@ -25,6 +28,7 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
-    "prisma": "^7.10.0"
+    "prisma": "^7.10.0",
+    "typescript": "~6.0.2"
   }
 }

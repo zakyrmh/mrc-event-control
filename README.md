@@ -14,12 +14,12 @@ Frontend masih template React/Vite dengan penghitung contoh. Backend hanya mempu
 
 | Bagian | Tercantum dalam manifest / tersedia di node_modules | Status integrasi |
 |---|---|---|
-| Web | React 19, Vite 8, TypeScript 6, Oxlint | Template aktif; `strict` belum diaktifkan eksplisit |
-| Server | Fastify 5, Socket.IO 4, Zod 4, tsx, TypeScript 7 | Belum ada source/runtime |
+| Web | React 19, Vite 8, TypeScript 6, Oxlint | Template aktif; `strict` aktif |
+| Server | Fastify 5, Socket.IO 4, Zod 4, tsx, TypeScript 6 | Baru memiliki guard runtime dan runner unit strict; belum ada server aplikasi |
 | Root | Prisma 7, adapter better-sqlite3, dotenv | Belum ada database atau konfigurasi Prisma |
 | Rencana | Tailwind CSS v4, shadcn/ui, Zustand bila perlu, React Router, Vitest, Playwright, socket.io-client, plugin static Fastify | [PROPOSED] Belum menjadi dependensi langsung aplikasi |
 
-Target SQLite dan TypeScript strict mengikuti arahan proyek; kompatibilitas runtime Node, native SQLite, dan perbedaan versi TypeScript perlu divalidasi sebelum implementasi. Detail ada di [ADR stack](docs/04-decisions/0002-tech-stack.md).
+Baseline fondasi memakai Node 24 dan TypeScript 6 lintas paket. Hasil validasi Linux awal, termasuk native SQLite dan batas portabilitas, dicatat di [validasi F-01](docs/03-quality/F01_RUNTIME_VALIDATION.md). Validasi pada laptop acara tetap wajib.
 
 ## Struktur dan Peta Baca
 
@@ -41,11 +41,13 @@ pnpm --filter web dev
 pnpm --filter web build
 pnpm --filter web lint
 pnpm --filter web preview
+pnpm --filter server typecheck
+pnpm --filter server test
 ```
 
-`install` memasang dependensi; perlu internet/cache saat persiapan, bukan hari acara. `dev` menjalankan Vite; `build` memeriksa TypeScript lalu membangun frontend; `lint` menjalankan Oxlint; `preview` memeriksa hasil build secara lokal. Perintah ini bersumber dari manifest, belum divalidasi lewat eksekusi dalam pekerjaan dokumentasi ini.
+`install` memasang dependensi; perlu internet/cache saat persiapan, bukan hari acara. `dev` menjalankan Vite; `build` memeriksa TypeScript lalu membangun frontend; `lint` menjalankan Oxlint; `preview` memeriksa hasil build secara lokal. Build/lint web dan typecheck/test server telah divalidasi pada host Linux F-01; laptop acara tetap harus diuji terpisah.
 
-`pnpm-workspace.yaml` masih memuat nilai placeholder `allowBuilds`; tim harus meninjau izin build native secara eksplisit sebelum instalasi. Root/server `test` sengaja gagal karena placeholder. Belum ada script backend dev/build/start, test runner, ataupun startup produksi. Jangan memakai Vite dev/preview sebagai server produksi. Rencana satu server lokal ada di [arsitektur](docs/02-engineering/ARCHITECTURE.md).
+`pnpm-workspace.yaml` mengizinkan build hanya untuk `@prisma/engines`, `better-sqlite3`, dan `esbuild`; lifecycle script `prisma` ditolak karena CLI tidak memerlukannya untuk instalasi. Root `test` masih sengaja gagal sebagai placeholder, sedangkan `server test` menjalankan unit test nyata. Belum ada script backend dev/build/start atau startup produksi. Jangan memakai Vite dev/preview sebagai server produksi. Rencana satu server lokal ada di [arsitektur](docs/02-engineering/ARCHITECTURE.md).
 
 ## Kontribusi dan Keputusan Terbuka
 
