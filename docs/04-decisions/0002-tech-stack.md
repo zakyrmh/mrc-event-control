@@ -9,7 +9,7 @@ Mencatat fakta repository dan rencana stack untuk semua modul. **Fakta diperiksa
 | Area | Bukti aktual | Rencana / gap |
 |---|---|---|
 | Web | React/React DOM `^19.2.8`, Vite `^8.3.0`, TypeScript `~6.0.2`, Oxlint `^1.81.0` di `apps/web/package.json` | Masih template; belum ada routing/state domain/overlay |
-| Server | Fastify `^5.12.5`, Socket.IO `^4.8.4`, Zod `^4.6.5`, tsx, dan TypeScript `~6.0.2` | Guard Node 24, tsconfig strict/noUncheckedIndexedAccess, typecheck, dan unit test tersedia; bootstrap aplikasi serta script dev/build/start belum ada |
+| Server | Fastify `^5.12.5`, Socket.IO `^4.8.4`, Zod `^4.6.5`, tsx, dan TypeScript `~6.0.2` | Guard Node 24, bootstrap health/readiness dan error envelope, tsconfig strict/noUncheckedIndexedAccess, dev/build/start, typecheck, dan unit test tersedia; API domain belum ada |
 | Persistensi | Prisma/client/adapter better-sqlite3 `^7.10.0`, dotenv `^18.0.7` di root | SQLite target; schema/client generation/migrasi belum ada |
 | Tooling | Node `>=24 <25`; pnpm 12.11.2; TypeScript `~6.0.2` lintas root/web/server; Oxlint react/typescript/oxc | Web/server strict aktif dan server test nyata tersedia; root test tetap placeholder gagal |
 | UI rencana | Tidak ada dependensi langsung Tailwind v4, shadcn/ui, Zustand, React Router | Tambah hanya melalui tugas implementasi terpisah |

@@ -6,16 +6,16 @@ Sistem kendali pertandingan dan tampilan OBS untuk Minangkabau Robot Contest X, 
 
 Kategori: Line Follower Digital Junior, Line Follower Digital Umum, Robot Sumo, dan Robot Soccer. Semua tayangan mempertemukan Tim A dan Tim B. Status pertandingan, fase operasional, timer, dan mode tayangan adalah konsep terpisah; lihat [istilah](CONTEXT.md).
 
-## Status Implementasi — 16 Oktober 2026
+## Status Implementasi — 18 Oktober 2026
 
-Frontend masih template React/Vite dengan penghitung contoh. Backend hanya mempunyai manifest dependensi; belum ada server, autentikasi, API, timer, integrasi OBS, skema Prisma, migrasi, atau pengujian aplikasi. Dokumentasi menggambarkan kebutuhan dan rancangan, bukan fitur yang sudah tersedia. Folder `prisma/`, `tests/`, dan `packages/shared/` belum berisi implementasi.
+Frontend masih template React/Vite dengan penghitung contoh. Backend sudah mempunyai guard runtime, kontrak bersama, bootstrap Fastify, endpoint health/readiness, dan error envelope, tetapi belum memiliki autentikasi, API domain, timer, integrasi OBS, skema Prisma, atau migrasi. Dokumentasi fitur operasional tetap menggambarkan kebutuhan dan rancangan, bukan fitur yang sudah tersedia.
 
 ## Teknologi yang Ditemukan
 
 | Bagian | Tercantum dalam manifest / tersedia di node_modules | Status integrasi |
 |---|---|---|
 | Web | React 19, Vite 8, TypeScript 6, Oxlint | Template aktif; `strict` aktif |
-| Server | Fastify 5, Socket.IO 4, Zod 4, tsx, TypeScript 6 | Baru memiliki guard runtime dan runner unit strict; belum ada server aplikasi |
+| Server | Fastify 5, Socket.IO 4, Zod 4, tsx, TypeScript 6 | Bootstrap, health/readiness, error envelope, build, launcher, dan unit test strict tersedia; belum ada API domain |
 | Root | Prisma 7, adapter better-sqlite3, dotenv | Belum ada database atau konfigurasi Prisma |
 | Rencana | Tailwind CSS v4, shadcn/ui, Zustand bila perlu, React Router, Vitest, Playwright, socket.io-client, plugin static Fastify | [PROPOSED] Belum menjadi dependensi langsung aplikasi |
 
@@ -41,13 +41,16 @@ pnpm --filter web dev
 pnpm --filter web build
 pnpm --filter web lint
 pnpm --filter web preview
+pnpm --filter server dev
+pnpm --filter server build
+pnpm --filter server start
 pnpm --filter server typecheck
 pnpm --filter server test
 ```
 
-`install` memasang dependensi; perlu internet/cache saat persiapan, bukan hari acara. `dev` menjalankan Vite; `build` memeriksa TypeScript lalu membangun frontend; `lint` menjalankan Oxlint; `preview` memeriksa hasil build secara lokal. Build/lint web dan typecheck/test server telah divalidasi pada host Linux F-01; laptop acara tetap harus diuji terpisah.
+`install` memasang dependensi; perlu internet/cache saat persiapan, bukan hari acara. Pada web, `dev` menjalankan Vite, `build` memeriksa TypeScript lalu membangun frontend, `lint` menjalankan Oxlint, dan `preview` memeriksa hasil build secara lokal. Pada server, `dev` menjalankan launcher dengan watch, `build` menghasilkan `apps/server/dist`, dan `start` menjalankan hasil build. Laptop acara tetap harus diuji terpisah.
 
-`pnpm-workspace.yaml` mengizinkan build hanya untuk `@prisma/engines`, `better-sqlite3`, dan `esbuild`; lifecycle script `prisma` ditolak karena CLI tidak memerlukannya untuk instalasi. Root `test` masih sengaja gagal sebagai placeholder, sedangkan `server test` menjalankan unit test nyata. Belum ada script backend dev/build/start atau startup produksi. Jangan memakai Vite dev/preview sebagai server produksi. Rencana satu server lokal ada di [arsitektur](docs/02-engineering/ARCHITECTURE.md).
+`pnpm-workspace.yaml` mengizinkan build hanya untuk `@prisma/engines`, `better-sqlite3`, dan `esbuild`; lifecycle script `prisma` ditolak karena CLI tidak memerlukannya untuk instalasi. Root `test` masih sengaja gagal sebagai placeholder, sedangkan `server test` menjalankan unit test nyata. Launcher server ini merupakan fondasi pengembangan lokal, belum launcher hari-H atau server statis frontend/OBS. Jangan memakai Vite dev/preview sebagai server produksi. Rencana satu server lokal ada di [arsitektur](docs/02-engineering/ARCHITECTURE.md).
 
 ## Kontribusi dan Keputusan Terbuka
 
