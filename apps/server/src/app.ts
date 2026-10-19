@@ -6,12 +6,14 @@ import Fastify, {
   type FastifyServerOptions,
 } from 'fastify'
 import type { ApiErrorEnvelope, FieldError } from '@mrc-x/shared/server'
+import { registerAuth, type AuthOptions } from './auth.js'
 
 export type ReadinessResult =
   | { ready: true; details?: Record<string, string> }
   | { ready: false; reason: string; details?: Record<string, string> }
 
 export interface BuildServerOptions {
+  auth?: AuthOptions
   logger?: FastifyServerOptions['logger']
   readiness?: () => ReadinessResult | Promise<ReadinessResult>
 }
@@ -88,6 +90,10 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
       details: result.details ?? {},
     }
   })
+
+  if (options.auth !== undefined) {
+    registerAuth(server, options.auth)
+  }
 
   server.setNotFoundHandler((request, reply) => {
     return reply.code(404).send(

@@ -8,16 +8,16 @@ Kategori: Line Follower Digital Junior, Line Follower Digital Umum, Robot Sumo, 
 
 ## Status Implementasi — 18 Oktober 2026
 
-Frontend masih template React/Vite dengan penghitung contoh. Backend sudah mempunyai guard runtime, kontrak bersama, bootstrap Fastify, endpoint health/readiness, dan error envelope, tetapi belum memiliki autentikasi, API domain, timer, integrasi OBS, skema Prisma, atau migrasi. Dokumentasi fitur operasional tetap menggambarkan kebutuhan dan rancangan, bukan fitur yang sudah tersedia.
+Frontend masih template React/Vite dengan penghitung contoh. Backend sudah mempunyai guard runtime, kontrak bersama, bootstrap Fastify, SQLite/Prisma, unit-of-work operasi, dan fondasi autentikasi lokal. API domain pertandingan, timer, dan integrasi OBS belum tersedia. Dokumentasi fitur operasional lain tetap menggambarkan kebutuhan dan rancangan, bukan fitur yang sudah tersedia.
 
 ## Teknologi yang Ditemukan
 
 | Bagian | Tercantum dalam manifest / tersedia di node_modules | Status integrasi |
 |---|---|---|
 | Web | React 19, Vite 8, TypeScript 6, Oxlint | Template aktif; `strict` aktif |
-| Server | Fastify 5, Socket.IO 4, Zod 4, tsx, TypeScript 6 | Bootstrap, health/readiness, error envelope, build, launcher, dan unit test strict tersedia; belum ada API domain |
+| Server | Fastify 5, Socket.IO 4, Zod 4, tsx, TypeScript 6 | Bootstrap, health/readiness, autentikasi lokal, namespace `/control`, error envelope, build, launcher, dan unit test strict tersedia; belum ada API domain pertandingan |
 | Root | Prisma 7, adapter better-sqlite3, dotenv | Belum ada database atau konfigurasi Prisma |
-| Rencana | Tailwind CSS v4, shadcn/ui, Zustand bila perlu, React Router, Vitest, Playwright, socket.io-client, plugin static Fastify | [PROPOSED] Belum menjadi dependensi langsung aplikasi |
+| Rencana | Tailwind CSS v4, shadcn/ui, Zustand bila perlu, React Router, Vitest, Playwright, plugin static Fastify | [PROPOSED] Belum menjadi dependensi langsung aplikasi; `socket.io-client` hanya dev dependency server untuk fixture integrasi |
 
 Baseline fondasi memakai Node 24 dan TypeScript 6 lintas paket. Hasil validasi Linux awal, termasuk native SQLite dan batas portabilitas, dicatat di [validasi F-01](docs/03-quality/F01_RUNTIME_VALIDATION.md). Validasi pada laptop acara tetap wajib.
 
@@ -46,7 +46,15 @@ pnpm --filter server build
 pnpm --filter server start
 pnpm --filter server typecheck
 pnpm --filter server test
+pnpm --filter server bootstrap:admin
 ```
+
+Bootstrap super-admin memerlukan `DATABASE_URL`,
+`MRC_BOOTSTRAP_ADMIN_USERNAME`, dan `MRC_BOOTSTRAP_ADMIN_PASSWORD` unik minimal
+12 karakter. Tidak ada password bawaan; bila super-admin sudah ada, perintah tidak
+mengubah akun. Server memerlukan `DATABASE_URL`. `ALLOWED_ORIGINS` menerima daftar
+origin lokal dipisahkan koma. Set `COOKIE_SECURE=true` saat HTTPS digunakan;
+pengecualian HTTP hanya untuk baseline loopback dan tidak boleh diekspos ke jaringan umum.
 
 `install` memasang dependensi; perlu internet/cache saat persiapan, bukan hari acara. Pada web, `dev` menjalankan Vite, `build` memeriksa TypeScript lalu membangun frontend, `lint` menjalankan Oxlint, dan `preview` memeriksa hasil build secara lokal. Pada server, `dev` menjalankan launcher dengan watch, `build` menghasilkan `apps/server/dist`, dan `start` menjalankan hasil build. Laptop acara tetap harus diuji terpisah.
 

@@ -1,6 +1,11 @@
 import { pathToFileURL } from 'node:url'
 
 import { buildServer } from './app.js'
+import {
+  InMemoryControlSocketRegistry,
+  registerControlSockets,
+} from './control-sockets.js'
+import { DatabaseConnection } from './database.js'
 import { assertSupportedNode } from './runtime.js'
 
 const defaultHost = '127.0.0.1'
@@ -29,11 +34,44 @@ export async function startServer(
 ): Promise<void> {
   assertSupportedNode()
 
-  const server = buildServer({ logger: true })
   const host = options.host ?? process.env.HOST ?? defaultHost
   const port = options.port ?? parsePort(process.env.PORT)
+  const databaseUrl = process.env.DATABASE_URL
+  if (databaseUrl === undefined) {
+    throw new Error('DATABASE_URL is required')
+  }
+  const connection = new DatabaseConnection(databaseUrl)
+  await connection.connect()
+  const configuredOrigins = process.env.ALLOWED_ORIGINS?.split(',')
+    .map((value) => value.trim())
+    .filter((value) => value !== '')
+  const allowedOrigins = configuredOrigins?.length
+    ? configuredOrigins
+    : [`http://${host}:${port}`]
+  const controlSockets = new InMemoryControlSocketRegistry()
+  const server = buildServer({
+    auth: {
+      allowedOrigins,
+      client: connection.client,
+      controlSockets,
+      secureCookies: process.env.COOKIE_SECURE === 'true',
+    },
+    logger: true,
+  })
+  const io = registerControlSockets(server.server, {
+    allowedOrigins,
+    client: connection.client,
+    registry: controlSockets,
+  })
+  server.addHook('onClose', async () => io.close())
+  server.addHook('onClose', async () => connection.disconnect())
 
-  await server.listen({ host, port })
+  try {
+    await server.listen({ host, port })
+  } catch (error) {
+    await connection.disconnect()
+    throw error
+  }
 }
 
 const entrypoint = process.argv[1]
