@@ -8,8 +8,9 @@ hasilnya bukan klaim E2E lifecycle, timer, gol, OBS, auth, atau browser offline.
 `OperationUnitOfWork` menyediakan reservation unik
 `principalId+scope+idempotencyKey`, pemeriksaan hash, execute yang mensyaratkan
 reservation, replay receipt terminal, rejection terminal, dan cancel-or-observe
-dengan tombstone. Penulis SQLite diantrikan per proses agar transaksi Prisma pada
-satu koneksi tidak saling bertumpang-tindih.
+dengan tombstone. Penulis SQLite diantrikan melalui satu antrean process-wide,
+sehingga beberapa instance service yang berbagi Prisma client tidak dapat
+menjalankan transaksi dan terminalisasi ledger secara bertumpang-tindih.
 
 Callback domain melakukan CAS di dalam transaksi yang sama dengan audit,
 outbox, receipt, dan perubahan ledger menjadi `SUCCEEDED`. Error domain definitif
@@ -27,7 +28,7 @@ menciptakan aturan match atau mengklaim fitur 002–004 telah tersedia.
 | F-05 / AC-22 / TC-22 | PASS (fondasi) | 100 retry key/hash sama menghasilkan satu effect/audit/receipt/outbox; hash berbeda menghasilkan `KEY_REUSED` |
 | F-05 / AC-24 / TC-24 | PASS sebagian | 10× fault pada masing-masing titik sesudah business, audit, outbox, dan receipt di SQLite nyata: nol sukses palsu dan ledger tetap `RESERVED` |
 | TM-07 / AC-32 / TC-32 | PASS (fixture server) | Tombstone sebelum reserve menolak delayed execute; RESERVED dapat dibatalkan; SUCCEEDED hanya diobservasi; runtime lama menjadi `REJECTED`; receipt pulih sesudah reconnect DB |
-| M-06 / AC-37 / TC-37 | PASS (fixture fondasi) | 20 key berbeda melawan revision 1: tepat satu `SUCCEEDED`, 19 `VERSION_CONFLICT`, satu audit/receipt/outbox |
+| M-06 / AC-37 / TC-37 | PASS (fixture fondasi) | 20 key berbeda melawan revision 1: tepat satu `SUCCEEDED`, 19 `REJECTED/VERSION_CONFLICT`, satu audit/receipt/outbox; regresi memakai 20 `OperationUnitOfWork` yang berbagi satu Prisma client dan membuktikan nol ledger `RESERVED` tersisa |
 
 Perintah final:
 
@@ -39,13 +40,15 @@ pnpm --filter server build
 PASS
 
 pnpm --filter server test
-PASS — 26 tests, 4 suites, 0 failed
+PASS — 27 tests, 4 suites, 0 failed
 ```
 
 Run pertama sesudah implementasi menemukan kegagalan oracle ledger pada race:
 hasil pemanggil menunjukkan 19 conflict tetapi hanya satu rejection terminal.
-Perbaikan menambahkan serialisasi penulis per proses. Run ulang membuktikan semua
-19 ledger ditutup `REJECTED/VERSION_CONFLICT`.
+Perbaikan awal menambahkan serialisasi per instance, tetapi QA lintas 20 instance
+masih menemukan 18 ledger `RESERVED`. Remediasi memindahkan antrean ke scope
+proses; regresi lintas instance membuktikan semua 19 ledger ditutup
+`REJECTED/VERSION_CONFLICT`.
 
 ## Batas dan Pekerjaan Lanjutan
 

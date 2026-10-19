@@ -109,15 +109,15 @@ function assertMatchingHash(
   }
 }
 
-export class OperationUnitOfWork {
-  #writeTail: Promise<void> = Promise.resolve()
+let processWriteTail: Promise<void> = Promise.resolve()
 
+export class OperationUnitOfWork {
   constructor(private readonly client: PrismaClient) {}
 
   async #serializeWrite<Result>(work: () => Promise<Result>): Promise<Result> {
-    const preceding = this.#writeTail
+    const preceding = processWriteTail
     let release = (): void => undefined
-    this.#writeTail = new Promise<void>((resolve) => {
+    processWriteTail = new Promise<void>((resolve) => {
       release = resolve
     })
     await preceding

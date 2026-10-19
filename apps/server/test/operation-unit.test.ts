@@ -378,4 +378,67 @@ describe('atomic operation unit of work', () => {
       await context.close()
     }
   })
+
+  it('terminalizes version conflicts across multiple unit-of-work instances', async () => {
+    const context = await fixture()
+    try {
+      const operations = Array.from({ length: 20 }, (_, index) => ({
+        identity: identity(`multi-instance-${index}`),
+        unit: new OperationUnitOfWork(context.connection.client),
+      }))
+      await Promise.all(
+        operations.map(({ identity: operation, unit }) =>
+          unit.reserve(operation),
+        ),
+      )
+
+      const results = await Promise.allSettled(
+        operations.map(({ identity: operation, unit }, index) =>
+          unit.execute({
+            ...operation,
+            currentRuntimeId: 'runtime-1',
+            mutate: mutation(1, `Multi-instance winner ${index}`),
+          }),
+        ),
+      )
+
+      assert.equal(
+        results.filter((result) => result.status === 'fulfilled').length,
+        1,
+      )
+      assert.equal(
+        results.filter((result) => result.status === 'rejected').length,
+        19,
+      )
+      assert.ok(
+        results.every(
+          (result) =>
+            result.status === 'fulfilled' ||
+            (result.reason instanceof OperationError &&
+              result.reason.code === 'VERSION_CONFLICT'),
+        ),
+      )
+
+      assert.equal(
+        await context.connection.client.operationLedger.count({
+          where: { status: 'SUCCEEDED', terminalCode: 'SUCCEEDED' },
+        }),
+        1,
+      )
+      assert.equal(
+        await context.connection.client.operationLedger.count({
+          where: { status: 'REJECTED', terminalCode: 'VERSION_CONFLICT' },
+        }),
+        19,
+      )
+      assert.equal(
+        await context.connection.client.operationLedger.count({
+          where: { status: 'RESERVED' },
+        }),
+        0,
+      )
+    } finally {
+      await context.close()
+    }
+  })
 })
