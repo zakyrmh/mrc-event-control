@@ -56,6 +56,59 @@ export function registerMatchRoutes(
   client: PrismaClient,
   timerService?: TimerService,
 ): void {
+  // --- ARENA QUERY (GET /api/v1/arenas/main) ---
+  server.get(
+    '/api/v1/arenas/main',
+    { config: { auth: { roles: ['OPERATOR', 'SUPER_ADMIN'] } } },
+    async (_request: FastifyRequest, reply) => {
+      const arena = await getOrCreateArena(client)
+      let activeMatch = null
+      if (arena.activeMatchId) {
+        activeMatch = await client.match.findUnique({
+          where: { id: arena.activeMatchId },
+          include: {
+            category: true,
+            teamA: true,
+            teamB: true,
+            segments: { orderBy: [{ ordinal: 'asc' }, { attempt: 'asc' }] },
+          },
+        })
+      }
+      return reply.code(200).send({
+        arena,
+        activeMatch,
+      })
+    },
+  )
+
+  // --- MATCH QUERY (GET /api/v1/matches/:id) ---
+  server.get(
+    '/api/v1/matches/:id',
+    { config: { auth: { roles: ['OPERATOR', 'SUPER_ADMIN'] } } },
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
+      const match = await client.match.findUnique({
+        where: { id: request.params.id },
+        include: {
+          category: true,
+          teamA: true,
+          teamB: true,
+          segments: { orderBy: [{ ordinal: 'asc' }, { attempt: 'asc' }] },
+          goals: { orderBy: { createdAt: 'asc' } },
+          results: { orderBy: { revision: 'asc' } },
+          goalIntents: { where: { status: 'READY' } },
+        },
+      })
+      if (!match) {
+        return errorResponse(reply, 404, 'NOT_FOUND', 'Match tidak ditemukan.', request.id)
+      }
+      const score = await calculateMatchScore(client, match.id)
+      return reply.code(200).send({
+        ...match,
+        score,
+      })
+    },
+  )
+
   // --- ARENA COMMANDS (match.select, match.release) ---
   server.post(
     '/api/v1/arenas/main/commands',
@@ -297,6 +350,55 @@ export function registerMatchRoutes(
       }
 
       const currentSegment = match.segments[match.segments.length - 1]
+
+      if (action === 'match.arm-start') {
+        const reviewDigest = body?.reviewDigest as string | undefined
+        const readinessToken = randomUUID()
+
+        if (timerService) {
+          try {
+            timerService.armReadinessToken(readinessToken)
+          } catch {
+            // ignore if no active timer
+          }
+        }
+
+        await client.auditEntry.create({
+          data: {
+            id: randomUUID(),
+            action: 'match.arm-start',
+            resourceType: 'Match',
+            resourceId: match.id,
+            actorId: request.authPrincipal?.userId ?? null,
+            afterJson: JSON.stringify({ readinessToken, reviewDigest }),
+          },
+        })
+
+        return reply.code(200).send({
+          readinessToken,
+          matchVersion: match.matchVersion,
+        })
+      }
+
+      if (action === 'match.disarm-start') {
+        const readinessToken = (body?.readinessToken as string) ?? null
+
+        await client.auditEntry.create({
+          data: {
+            id: randomUUID(),
+            action: 'match.disarm-start',
+            resourceType: 'Match',
+            resourceId: match.id,
+            actorId: request.authPrincipal?.userId ?? null,
+            afterJson: JSON.stringify({ readinessToken }),
+          },
+        })
+
+        return reply.code(200).send({
+          disarmed: true,
+          matchVersion: match.matchVersion,
+        })
+      }
 
       if (action === 'segment.prepare') {
         const kind = (body?.kind as 'START' | 'ROUND' | 'HALF') ?? 'ROUND'
@@ -634,6 +736,15 @@ export function registerMatchRoutes(
 
           return { updatedMatch, activeGoalIntentId }
         })
+
+        if (targetPhase === 'COMPETITION' && timerService) {
+          try {
+            const readinessToken = body?.readinessToken as string | undefined
+            await timerService.start({ readinessToken, actorId: request.authPrincipal?.userId ?? null })
+          } catch {
+            // ignore if no active timer or fake port
+          }
+        }
 
         return reply.code(200).send({
           matchVersion: result.updatedMatch.matchVersion,

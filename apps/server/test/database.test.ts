@@ -10,6 +10,8 @@ import {
   createVerifiedBackup,
   DatabaseConnection,
   databaseBusyTimeoutMs,
+  restoreFromBackup,
+  type DatabaseVersions,
 } from '../src/database.js'
 
 const migrationUrl = new URL(
@@ -21,6 +23,10 @@ describe('SQLite foundation', () => {
   let directory: string
   let databasePath: string
   let connection: DatabaseConnection
+  const expectedVersions: DatabaseVersions = {
+    appVersion: '1.0.0',
+    schemaVersion: '20261018190000',
+  }
 
   before(async () => {
     directory = await mkdtemp(join(tmpdir(), 'mrc-x-f04-'))
@@ -181,10 +187,6 @@ describe('SQLite foundation', () => {
 
   it('creates and verifies a restorable copy with version pairing', async () => {
     const backupPath = join(directory, 'verified-copy.db')
-    const expectedVersions = {
-      appVersion: '1.0.0',
-      schemaVersion: '20261018190000',
-    }
     await assert.rejects(
       createVerifiedBackup(
         databasePath,
@@ -255,6 +257,66 @@ describe('SQLite foundation', () => {
         true,
       ),
       /approved backup root/,
+    )
+  })
+
+  it('restores from a verified backup, archiving the current database and verifying contents (L-09 / TC-16)', async () => {
+    const backupPath = join(directory, 'for-restore.db')
+    await connection.disconnect()
+
+    const backupInfo = await createVerifiedBackup(
+      databasePath,
+      backupPath,
+      directory,
+      expectedVersions,
+      true,
+    )
+
+    // Now restore into a fresh target path
+    const restoredTarget = join(directory, 'restored-target.db')
+    const restoreResult = await restoreFromBackup({
+      backupPath,
+      targetDatabasePath: restoredTarget,
+      expectedVersions,
+      expectedSha256: backupInfo.sha256,
+    })
+
+    assert.equal(restoreResult.restored, true)
+    assert.equal(restoreResult.restoredPath, restoredTarget)
+
+    // Reopen restored target to prove it works
+    const restoredConn = new DatabaseConnection(`file:${restoredTarget}`)
+    await restoredConn.connect()
+    const teamCount = await restoredConn.client.team.count()
+    assert.equal(teamCount, 2)
+    await restoredConn.disconnect()
+
+    // Restore again into restoredTarget to verify pre-restore archiving
+    const secondRestore = await restoreFromBackup({
+      backupPath,
+      targetDatabasePath: restoredTarget,
+      expectedVersions,
+    })
+    assert.ok(secondRestore.archivedCurrentPath)
+
+    // Reconnect original connection for after() hook
+    connection = new DatabaseConnection(`file:${databasePath}`)
+    await connection.connect()
+  })
+
+  it('rejects restore if backup file is corrupted or checksum mismatches (TC-16)', async () => {
+    const corruptBackupPath = join(directory, 'corrupt.db')
+    await writeFile(corruptBackupPath, 'completely invalid sqlite database content')
+
+    await assert.rejects(
+      async () => {
+        await restoreFromBackup({
+          backupPath: corruptBackupPath,
+          targetDatabasePath: join(directory, 'should-not-exist.db'),
+          expectedVersions,
+        })
+      },
+      /Corrupted backup file/,
     )
   })
 })

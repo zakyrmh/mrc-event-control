@@ -274,7 +274,25 @@ describe('Match Lifecycle Integration with Timer & Arena (L-04 / TC-02, TC-03, T
     })
     assert.equal(segInDb?.status, 'PREPARED')
 
-    // 2. Advance to COMPETITION -> first attempt becomes ACTIVE atomically
+    // 2. Arm start before kickoff (L-08 / match.arm-start)
+    const armRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: adminSession.cookie,
+        origin,
+        'x-csrf-token': adminSession.csrfToken,
+      },
+      payload: {
+        action: 'match.arm-start',
+        expectedMatchVersion: match1Version,
+      },
+    })
+    assert.equal(armRes.statusCode, 200)
+    const readinessToken = armRes.json().readinessToken
+    assert.ok(readinessToken)
+
+    // 3. Advance to COMPETITION with readinessToken -> first attempt becomes ACTIVE atomically
     const advRes = await server.inject({
       method: 'POST',
       url: `/api/v1/matches/${match1Id}/commands`,
@@ -286,6 +304,7 @@ describe('Match Lifecycle Integration with Timer & Arena (L-04 / TC-02, TC-03, T
       payload: {
         action: 'phase.advance',
         targetPhase: 'COMPETITION',
+        readinessToken,
         expectedMatchVersion: match1Version,
       },
     })

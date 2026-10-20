@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import {
+  copyFile,
   mkdtemp,
   open,
   readFile,
@@ -194,5 +195,84 @@ export async function createVerifiedBackup(
     }
   } finally {
     await rm(temporaryDirectory, { force: true, recursive: true })
+  }
+}
+
+export interface RestoreBackupOptions {
+  backupPath: string
+  targetDatabasePath: string
+  archiveDirectory?: string
+  expectedVersions: DatabaseVersions
+  expectedSha256?: string
+}
+
+export async function restoreFromBackup(options: RestoreBackupOptions): Promise<{
+  restored: boolean
+  archivedCurrentPath?: string
+  restoredPath: string
+}> {
+  const backupStat = await stat(options.backupPath)
+  if (!backupStat.isFile()) {
+    throw new Error('Backup file not found')
+  }
+
+  const backupBuffer = await readFile(options.backupPath)
+  if (options.expectedSha256) {
+    const actualSha = createHash('sha256').update(backupBuffer).digest('hex')
+    if (actualSha !== options.expectedSha256) {
+      throw new Error('Backup checksum mismatch')
+    }
+  }
+
+  let candidateDb: Database.Database
+  try {
+    candidateDb = new Database(options.backupPath, { readonly: true, fileMustExist: true })
+  } catch (err) {
+    throw new Error(`Corrupted backup file: failed to open SQLite database: ${String(err)}`)
+  }
+
+  try {
+    try {
+      const integrity = candidateDb.pragma('integrity_check', { simple: true })
+      if (integrity !== 'ok') {
+        throw new Error(`Corrupted backup file: integrity_check returned ${integrity}`)
+      }
+      const version = candidateDb
+        .prepare('SELECT "appVersion", "schemaVersion" FROM "EventConfig" LIMIT 1')
+        .get() as DatabaseVersions | undefined
+      if (
+        version?.appVersion !== options.expectedVersions.appVersion ||
+        version.schemaVersion !== options.expectedVersions.schemaVersion
+      ) {
+        throw new Error('Backup application/schema version pairing does not match')
+      }
+    } catch (err) {
+      if (err instanceof Error && err.message.startsWith('Corrupted backup file')) {
+        throw err
+      }
+      throw new Error(`Corrupted backup file: SQLite inspection failed: ${String(err)}`)
+    }
+  } finally {
+    candidateDb.close()
+  }
+
+  let archivedCurrentPath: string | undefined
+  try {
+    const currentStat = await stat(options.targetDatabasePath)
+    if (currentStat.isFile()) {
+      const archDir = options.archiveDirectory ?? dirname(options.targetDatabasePath)
+      archivedCurrentPath = resolve(archDir, `archive-pre-restore-${Date.now()}.db`)
+      await copyFile(options.targetDatabasePath, archivedCurrentPath)
+    }
+  } catch {
+    // target file might not exist yet
+  }
+
+  await copyFile(options.backupPath, options.targetDatabasePath)
+
+  return {
+    restored: true,
+    archivedCurrentPath,
+    restoredPath: options.targetDatabasePath,
   }
 }
