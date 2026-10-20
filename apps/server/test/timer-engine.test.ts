@@ -23,9 +23,13 @@ const m3Url = new URL(
   import.meta.url,
 )
 const m4Url = new URL(
-  '../prisma/migrations/20261021100000_add_timer_engine_foundation/migration.sql',
+  '../prisma/migrations/20261021110000_add_timer_engine_foundation/migration.sql',
   import.meta.url,
-).toString().replace('20261021100000_add_timer_engine_foundation', '20261021110000_add_timer_engine_foundation')
+)
+const m5Url = new URL(
+  '../prisma/migrations/20261021120000_add_goal_intent/migration.sql',
+  import.meta.url,
+)
 
 describe('Timer Engine Service & Recovery (003 E-01 s/d E-08 / TC-05, TC-06, TC-14, TC-23, TC-25)', () => {
   let connection: DatabaseConnection
@@ -42,13 +46,15 @@ describe('Timer Engine Service & Recovery (003 E-01 s/d E-08 / TC-05, TC-06, TC-
     const m1 = await readFile(m1Url, 'utf8')
     const m2 = await readFile(m2Url, 'utf8')
     const m3 = await readFile(m3Url, 'utf8')
-    const m4 = await readFile(new URL(m4Url), 'utf8')
+    const m4 = await readFile(m4Url, 'utf8')
+    const m5 = await readFile(m5Url, 'utf8')
 
     const db = new Database(databasePath)
     db.exec(m1)
     db.exec(m2)
     db.exec(m3)
     db.exec(m4)
+    db.exec(m5)
     db.close()
 
     connection = new DatabaseConnection(`file:${databasePath}`)

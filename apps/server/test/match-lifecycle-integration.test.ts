@@ -29,6 +29,10 @@ const m4Url = new URL(
   '../prisma/migrations/20261021110000_add_timer_engine_foundation/migration.sql',
   import.meta.url,
 )
+const m5Url = new URL(
+  '../prisma/migrations/20261021120000_add_goal_intent/migration.sql',
+  import.meta.url,
+)
 
 const origin = 'http://localhost:3000'
 
@@ -66,6 +70,7 @@ describe('Match Lifecycle Integration with Timer & Arena (L-04 / TC-02, TC-03, T
   let server: FastifyInstance
   let timerService: TimerService
   let adminSession: { cookie: string; csrfToken: string }
+  let operatorSession: { cookie: string; csrfToken: string }
   let categoryId: string
   let teamAId: string
   let teamBId: string
@@ -82,12 +87,14 @@ describe('Match Lifecycle Integration with Timer & Arena (L-04 / TC-02, TC-03, T
     const m2 = await readFile(m2Url, 'utf8')
     const m3 = await readFile(m3Url, 'utf8')
     const m4 = await readFile(m4Url, 'utf8')
+    const m5 = await readFile(m5Url, 'utf8')
 
     const db = new Database(databasePath)
     db.exec(m1)
     db.exec(m2)
     db.exec(m3)
     db.exec(m4)
+    db.exec(m5)
     db.close()
 
     connection = new DatabaseConnection(`file:${databasePath}`)
@@ -117,6 +124,7 @@ describe('Match Lifecycle Integration with Timer & Arena (L-04 / TC-02, TC-03, T
     })
 
     adminSession = await login(server, 'admin', 'admin-secret-password')
+    operatorSession = await login(server, 'operator', 'operator-secret-password')
 
     categoryId = randomUUID()
     await connection.client.category.create({
@@ -383,5 +391,515 @@ describe('Match Lifecycle Integration with Timer & Arena (L-04 / TC-02, TC-03, T
     assert.equal(res.json().activeMatchId, match1Id)
     arenaVersion = res.json().arenaVersion
     match1Version = res.json().matchVersion
+  })
+
+  it('rejects phase override without reason or authority reference (422 / ML-03)', async () => {
+    const res = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: adminSession.cookie,
+        origin,
+        'x-csrf-token': adminSession.csrfToken,
+      },
+      payload: {
+        action: 'phase.override',
+        targetPhase: 'WARMUP',
+        expectedMatchVersion: match1Version,
+        reason: '',
+        authorityReference: '',
+      },
+    })
+    assert.equal(res.statusCode, 422)
+    assert.equal(res.json().error.code, 'INVALID_INPUT')
+  })
+
+  it('executes phase override with reason and authorityReference (ML-03 / AC-04)', async () => {
+    const res = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: adminSession.cookie,
+        origin,
+        'x-csrf-token': adminSession.csrfToken,
+      },
+      payload: {
+        action: 'phase.override',
+        targetPhase: 'WARMUP',
+        expectedMatchVersion: match1Version,
+        reason: 'Robot rusak sebelum kickoff resmi, pemanasan ulang diminta juri',
+        authorityReference: 'JURI-UTAMA-SOCCER-1',
+      },
+    })
+    assert.equal(res.statusCode, 200)
+    assert.equal(res.json().phase, 'WARMUP')
+    match1Version = res.json().matchVersion
+
+    // Verify audit entry contains before/after and authority reference
+    const audit = await connection.client.auditEntry.findFirst({
+      where: { resourceType: 'Match', resourceId: match1Id, action: 'phase.override' },
+    })
+    assert.ok(audit)
+    assert.equal(audit.authorityReference, 'JURI-UTAMA-SOCCER-1')
+    assert.match(audit.beforeJson ?? '', /PAUSED/)
+    assert.match(audit.afterJson ?? '', /WARMUP/)
+  })
+
+  it('generates canonical review digest and restarts segment attempt (ML-04 / AC-07)', async () => {
+    const match = await connection.client.match.findUnique({
+      where: { id: match1Id },
+      include: { segments: true },
+    })
+    const segmentToRestart = match?.segments[0]
+    assert.ok(segmentToRestart)
+
+    // 1. Request review digest
+    const reviewRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/review`,
+      headers: {
+        cookie: adminSession.cookie,
+        origin,
+        'x-csrf-token': adminSession.csrfToken,
+      },
+      payload: {
+        action: 'segment.restart',
+        targetId: segmentToRestart.id,
+      },
+    })
+    assert.equal(reviewRes.statusCode, 200)
+    const reviewDigest = reviewRes.json().reviewDigest
+    assert.ok(reviewDigest)
+
+    // 2. Reject if digest is stale
+    const staleRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: adminSession.cookie,
+        origin,
+        'x-csrf-token': adminSession.csrfToken,
+      },
+      payload: {
+        action: 'segment.restart',
+        segmentAttemptId: segmentToRestart.id,
+        expectedMatchVersion: match1Version,
+        reason: 'Sinyal terputus saat kickoff',
+        authorityReference: 'JURI-1',
+        confirmImpactDigest: 'invalid-stale-hash',
+      },
+    })
+    assert.equal(staleRes.statusCode, 409)
+    assert.equal(staleRes.json().error.code, 'REVIEW_STALE')
+
+    // 3. Restart with valid digest succeeds
+    const restartRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: adminSession.cookie,
+        origin,
+        'x-csrf-token': adminSession.csrfToken,
+      },
+      payload: {
+        action: 'segment.restart',
+        segmentAttemptId: segmentToRestart.id,
+        expectedMatchVersion: match1Version,
+        reason: 'Sinyal terputus saat kickoff',
+        authorityReference: 'JURI-1',
+        confirmImpactDigest: reviewDigest,
+      },
+    })
+    assert.equal(restartRes.statusCode, 200)
+    const data = restartRes.json()
+    assert.equal(data.ordinal, segmentToRestart.ordinal)
+    assert.equal(data.attempt, segmentToRestart.attempt + 1)
+    match1Version = data.matchVersion
+
+    // Verify in database: old segment is REPLACED, new segment is PREPARED
+    const oldSeg = await connection.client.segmentAttempt.findUnique({
+      where: { id: segmentToRestart.id },
+    })
+    assert.equal(oldSeg?.status, 'REPLACED')
+    assert.equal(oldSeg?.reason, 'Sinyal terputus saat kickoff')
+
+    const newSeg = await connection.client.segmentAttempt.findUnique({
+      where: { id: data.currentSegmentId },
+    })
+    assert.equal(newSeg?.status, 'PREPARED')
+    assert.equal(newSeg?.supersedesAttemptId, segmentToRestart.id)
+  })
+
+  // --- L-06: GoalIntent, Soccer goal.add, rearm, correct, and goal.reassign ---
+  let activeGoalIntentId: string
+  let firstGoalId: string
+  let secondGoalId: string
+
+  it('generates a single READY GoalIntent when entering COMPETITION (SC-01)', async () => {
+    const advRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: adminSession.cookie,
+        origin,
+        'x-csrf-token': adminSession.csrfToken,
+      },
+      payload: {
+        action: 'phase.advance',
+        targetPhase: 'COMPETITION',
+        expectedMatchVersion: match1Version,
+      },
+    })
+    assert.equal(advRes.statusCode, 200)
+    assert.equal(advRes.json().phase, 'COMPETITION')
+    assert.ok(advRes.json().activeGoalIntentId)
+    activeGoalIntentId = advRes.json().activeGoalIntentId
+    match1Version = advRes.json().matchVersion
+
+    // Verify GoalIntent in DB is READY
+    const intentInDb = await connection.client.goalIntent.findUnique({
+      where: { id: activeGoalIntentId },
+    })
+    assert.equal(intentInDb?.status, 'READY')
+  })
+
+  it('records a goal (goal.add), consumes the GoalIntent, and updates score (SC-01 / TC-08)', async () => {
+    const goalRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: operatorSession.cookie,
+        origin,
+        'x-csrf-token': operatorSession.csrfToken,
+      },
+      payload: {
+        action: 'goal.add',
+        goalIntentId: activeGoalIntentId,
+        side: 'A',
+        expectedMatchVersion: match1Version,
+      },
+    })
+
+    assert.equal(goalRes.statusCode, 200)
+    const data = goalRes.json()
+    assert.equal(data.side, 'A')
+    assert.equal(data.score.goalsA, 1)
+    assert.equal(data.score.goalsB, 0)
+    firstGoalId = data.goalEventId
+    match1Version = data.matchVersion
+
+    // Verify intent is CONSUMED in DB
+    const intentInDb = await connection.client.goalIntent.findUnique({
+      where: { id: activeGoalIntentId },
+    })
+    assert.equal(intentInDb?.status, 'CONSUMED')
+  })
+
+  it('rejects double-submission with consumed GoalIntent (409 GOAL_INTENT_CONSUMED / SC-01 / TC-22)', async () => {
+    const doubleRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: operatorSession.cookie,
+        origin,
+        'x-csrf-token': operatorSession.csrfToken,
+      },
+      payload: {
+        action: 'goal.add',
+        goalIntentId: activeGoalIntentId,
+        side: 'A',
+        expectedMatchVersion: match1Version,
+      },
+    })
+
+    assert.equal(doubleRes.statusCode, 409)
+    assert.equal(doubleRes.json().error.code, 'GOAL_INTENT_CONSUMED')
+  })
+
+  it('re-arms next goal intent explicitly via goal.prepare-next (SC-02)', async () => {
+    const rearmRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: operatorSession.cookie,
+        origin,
+        'x-csrf-token': operatorSession.csrfToken,
+      },
+      payload: {
+        action: 'goal.prepare-next',
+        previousGoalIntentId: activeGoalIntentId,
+        expectedMatchVersion: match1Version,
+      },
+    })
+
+    assert.equal(rearmRes.statusCode, 200)
+    assert.equal(rearmRes.json().status, 'READY')
+    activeGoalIntentId = rearmRes.json().goalIntentId
+
+    // Record second goal for Team B
+    const goal2Res = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: operatorSession.cookie,
+        origin,
+        'x-csrf-token': operatorSession.csrfToken,
+      },
+      payload: {
+        action: 'goal.add',
+        goalIntentId: activeGoalIntentId,
+        side: 'B',
+        expectedMatchVersion: match1Version,
+      },
+    })
+    assert.equal(goal2Res.statusCode, 200)
+    assert.equal(goal2Res.json().score.goalsA, 1)
+    assert.equal(goal2Res.json().score.goalsB, 1)
+    secondGoalId = goal2Res.json().goalEventId
+    match1Version = goal2Res.json().matchVersion
+  })
+
+  it('reassigns goal side atomically via goal.reassign (-1 on B, +1 on A / SC-04)', async () => {
+    const reassignRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: operatorSession.cookie,
+        origin,
+        'x-csrf-token': operatorSession.csrfToken,
+      },
+      payload: {
+        action: 'goal.reassign',
+        sourceGoalEventId: secondGoalId,
+        targetSide: 'A',
+        reason: 'Wasit mengoreksi bahwa gol tadi dicetak Tim A bukan Tim B',
+        authorityReference: 'JURI-1',
+        expectedMatchVersion: match1Version,
+      },
+    })
+
+    assert.equal(reassignRes.statusCode, 200)
+    const data = reassignRes.json()
+    assert.equal(data.newSide, 'A')
+    assert.equal(data.score.goalsA, 2)
+    assert.equal(data.score.goalsB, 0)
+    match1Version = data.matchVersion
+
+    // Verify database lineage: both events share logicalGoalId and correctionGroupId
+    const cancelEvent = await connection.client.goalEvent.findFirst({
+      where: { correctsGoalId: secondGoalId },
+    })
+    assert.ok(cancelEvent)
+    assert.equal(cancelEvent.delta, -1)
+    assert.equal(cancelEvent.side, 'B')
+
+    const newEvent = await connection.client.goalEvent.findUnique({
+      where: { id: data.reassignedGoalId },
+    })
+    assert.ok(newEvent)
+    assert.equal(newEvent.delta, 1)
+    assert.equal(newEvent.side, 'A')
+    assert.equal(newEvent.correctionGroupId, cancelEvent.correctionGroupId)
+  })
+
+  it('corrects an invalid goal via goal.correct (-1 delta / SC-03)', async () => {
+    const correctRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: operatorSession.cookie,
+        origin,
+        'x-csrf-token': operatorSession.csrfToken,
+      },
+      payload: {
+        action: 'goal.correct',
+        correctsGoalId: firstGoalId,
+        reason: 'Pelanggaran terjadi sesaat sebelum bola masuk',
+        authorityReference: 'JURI-1',
+        expectedMatchVersion: match1Version,
+      },
+    })
+
+    assert.equal(correctRes.statusCode, 200)
+    const data = correctRes.json()
+    assert.equal(data.correctedGoalId, firstGoalId)
+    assert.equal(data.score.goalsA, 1)
+    assert.equal(data.score.goalsB, 0)
+    match1Version = data.matchVersion
+
+    // Verify in DB that cancel event was recorded
+    const cancelEvent = await connection.client.goalEvent.findFirst({
+      where: { id: data.cancelEventId },
+    })
+    assert.equal(cancelEvent?.delta, -1)
+    assert.equal(cancelEvent?.reason, 'Pelanggaran terjadi sesaat sebelum bola masuk')
+  })
+
+  // --- L-07: Result drafting, finalization, reopen, refinalize, cancel-correction ---
+  let draftRevisionId: string
+
+  it('moves to RESULT phase and creates a draft result revision (result.draft / TC-09)', async () => {
+    // 1. Advance to RESULT
+    const resRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: adminSession.cookie,
+        origin,
+        'x-csrf-token': adminSession.csrfToken,
+      },
+      payload: {
+        action: 'phase.advance',
+        targetPhase: 'RESULT',
+        expectedMatchVersion: match1Version,
+      },
+    })
+    assert.equal(resRes.statusCode, 200)
+    assert.equal(resRes.json().phase, 'RESULT')
+    match1Version = resRes.json().matchVersion
+
+    // 2. Draft result revision
+    const draftRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: operatorSession.cookie,
+        origin,
+        'x-csrf-token': operatorSession.csrfToken,
+      },
+      payload: {
+        action: 'result.draft',
+        decisionText: 'Tim Alpha Soccer menang 1 - 0 atas Tim Beta Soccer',
+        winnerTeamId: teamAId,
+        finalGoalsA: 1,
+        finalGoalsB: 0,
+        refereeReference: 'JURI-UTAMA-SOCCER-1',
+        expectedMatchVersion: match1Version,
+      },
+    })
+
+    assert.equal(draftRes.statusCode, 200)
+    const data = draftRes.json()
+    assert.equal(data.status, 'DRAFT')
+    assert.equal(data.winnerTeamId, teamAId)
+    assert.equal(data.finalGoalsA, 1)
+    assert.equal(data.finalGoalsB, 0)
+    draftRevisionId = data.resultRevisionId
+    match1Version = data.matchVersion
+  })
+
+  it('finalizes result (result.finalize), marking match COMPLETED and releasing arena (TC-09)', async () => {
+    const finRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: operatorSession.cookie,
+        origin,
+        'x-csrf-token': operatorSession.csrfToken,
+      },
+      payload: {
+        action: 'result.finalize',
+        draftRevisionId,
+        expectedMatchVersion: match1Version,
+      },
+    })
+
+    assert.equal(finRes.statusCode, 200)
+    const data = finRes.json()
+    assert.equal(data.status, 'COMPLETED')
+    assert.equal(data.phase, 'FINISHED')
+    match1Version = data.matchVersion
+    arenaVersion = data.arenaVersion
+
+    // Verify in database: result revision is FINAL, arena has activeMatchId: null
+    const finalRev = await connection.client.resultRevision.findUnique({
+      where: { id: draftRevisionId },
+    })
+    assert.equal(finalRev?.status, 'FINAL')
+    assert.ok(finalRev?.finalizedAt)
+
+    const arena = await connection.client.arenaState.findUnique({ where: { id: 'main' } })
+    assert.equal(arena?.activeMatchId, null)
+  })
+
+  it('forbids operator from reopening finalized match (403 FORBIDDEN / TC-19)', async () => {
+    const reopenRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: operatorSession.cookie,
+        origin,
+        'x-csrf-token': operatorSession.csrfToken,
+      },
+      payload: {
+        action: 'result.reopen',
+        reason: 'Sengketa hasil diajukan manajer tim',
+        authorityReference: 'DEWAN-JURI-1',
+        expectedMatchVersion: match1Version,
+      },
+    })
+
+    assert.equal(reopenRes.statusCode, 403)
+    assert.equal(reopenRes.json().error.code, 'FORBIDDEN')
+  })
+
+  it('allows super-admin to reopen match into CORRECTION_PENDING and refinalize (TC-10)', async () => {
+    // 1. Reopen
+    const reopenRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: adminSession.cookie,
+        origin,
+        'x-csrf-token': adminSession.csrfToken,
+      },
+      payload: {
+        action: 'result.reopen',
+        reason: 'Koreksi administratif nama pengesah juri',
+        authorityReference: 'KETUA-JURI-1',
+        expectedMatchVersion: match1Version,
+      },
+    })
+
+    assert.equal(reopenRes.statusCode, 200)
+    const reopenData = reopenRes.json()
+    assert.equal(reopenData.status, 'CORRECTION_PENDING')
+    assert.equal(reopenData.revision, 2)
+    match1Version = reopenData.matchVersion
+    const correctionDraftId = reopenData.draftRevisionId
+
+    // 2. Refinalize as super-admin
+    const refinalizeRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: adminSession.cookie,
+        origin,
+        'x-csrf-token': adminSession.csrfToken,
+      },
+      payload: {
+        action: 'result.refinalize',
+        draftRevisionId: correctionDraftId,
+        reason: 'Pembaruan pengesah selesai diverifikasi',
+        authorityReference: 'KETUA-JURI-1',
+        expectedMatchVersion: match1Version,
+      },
+    })
+
+    assert.equal(refinalizeRes.statusCode, 200)
+    const refinalData = refinalizeRes.json()
+    assert.equal(refinalData.status, 'COMPLETED')
+    match1Version = refinalData.matchVersion
+
+    // Verify older revision is SUPERSEDED and new revision is FINAL
+    const rev1 = await connection.client.resultRevision.findUnique({
+      where: { id: draftRevisionId },
+    })
+    assert.equal(rev1?.status, 'SUPERSEDED')
+
+    const rev2 = await connection.client.resultRevision.findUnique({
+      where: { id: correctionDraftId },
+    })
+    assert.equal(rev2?.status, 'FINAL')
   })
 })

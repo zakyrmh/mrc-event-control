@@ -27,6 +27,10 @@ const migration4Url = new URL(
   '../prisma/migrations/20261021110000_add_timer_engine_foundation/migration.sql',
   import.meta.url,
 )
+const migration5Url = new URL(
+  '../prisma/migrations/20261021120000_add_goal_intent/migration.sql',
+  import.meta.url,
+)
 
 const origin = 'http://localhost:3000'
 
@@ -76,11 +80,13 @@ describe('Team & Match Management (T-01 - T-04)', () => {
     const m2 = await readFile(migration2Url, 'utf8')
     const m3 = await readFile(migration3Url, 'utf8')
     const m4 = await readFile(migration4Url, 'utf8')
+    const m5 = await readFile(migration5Url, 'utf8')
     const db = new Database(databasePath)
     db.exec(m1)
     db.exec(m2)
     db.exec(m3)
     db.exec(m4)
+    db.exec(m5)
     db.close()
 
     connection = new DatabaseConnection(`file:${databasePath}`)
