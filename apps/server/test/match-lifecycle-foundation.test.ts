@@ -20,6 +20,10 @@ const m3Url = new URL(
   '../prisma/migrations/20261021100000_add_match_lifecycle_foundation/migration.sql',
   import.meta.url,
 )
+const m4Url = new URL(
+  '../prisma/migrations/20261021110000_add_timer_engine_foundation/migration.sql',
+  import.meta.url,
+)
 
 describe('Match Lifecycle SQLite Foundation (L-01 / ML-01)', () => {
   let connection: DatabaseConnection
@@ -35,11 +39,13 @@ describe('Match Lifecycle SQLite Foundation (L-01 / ML-01)', () => {
     const m1 = await readFile(m1Url, 'utf8')
     const m2 = await readFile(m2Url, 'utf8')
     const m3 = await readFile(m3Url, 'utf8')
+    const m4 = await readFile(m4Url, 'utf8')
 
     const db = new Database(databasePath)
     db.exec(m1)
     db.exec(m2)
     db.exec(m3)
+    db.exec(m4)
     db.close()
 
     connection = new DatabaseConnection(`file:${databasePath}`)

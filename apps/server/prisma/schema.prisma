@@ -30,6 +30,7 @@ model Category {
   groups    CompetitionGroup[]
   teams     Team[]
   matches   Match[]
+  timerConfigs TimerConfig[]
 }
 
 model CompetitionGroup {
@@ -224,6 +225,7 @@ model Match {
   segments          SegmentAttempt[]
   goals             GoalEvent[]
   results           ResultRevision[]
+  timerInstances    TimerInstance[]
 
   @@index([categoryId])
   @@index([groupId])
@@ -277,6 +279,7 @@ model SegmentAttempt {
   updatedAt           DateTime    @updatedAt
   match               Match       @relation(fields: [matchId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   goals               GoalEvent[]
+  timerInstances      TimerInstance[]
 
   @@unique([matchId, ordinal, attempt])
   @@index([matchId])
@@ -324,4 +327,45 @@ model ResultRevision {
 
   @@unique([matchId, revision])
   @@index([matchId])
+}
+
+model TimerConfig {
+  id          String   @id
+  categoryId  String
+  phaseType   String   // 'CALLING', 'WARMUP', 'COMPETITION', 'INTERMISSION'
+  stageLabel  String?
+  initialMs   Int?     // null means not confirmed yet [NEEDS CONFIRMATION]
+  approvedBy  String?
+  sourceNote  String?
+  revision    Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([categoryId, phaseType])
+  @@index([categoryId])
+}
+
+model TimerInstance {
+  id                  String          @id
+  matchId             String
+  segmentAttemptId    String?
+  type                String          // 'CALLING', 'WARMUP', 'COMPETITION', 'INTERMISSION'
+  state               String          @default("IDLE") // 'IDLE', 'RUNNING', 'PAUSED', 'STOPPED', 'EXPIRED', 'RECOVERY_REQUIRED'
+  initialMs           Int             // Snapshot from config or command
+  remainingAtAnchorMs Int
+  anchorWallUtc       DateTime?
+  checkpointWallUtc   DateTime?
+  runtimeId           String
+  checkpointSeq       Int             @default(1)
+  timerGeneration     Int             @default(1)
+  storageHealth       String          @default("HEALTHY") // 'HEALTHY', 'DEGRADED', 'RECOVERY_PENDING'
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  match               Match           @relation(fields: [matchId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  segmentAttempt      SegmentAttempt? @relation(fields: [segmentAttemptId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([matchId])
+  @@index([segmentAttemptId])
+  @@index([state])
 }

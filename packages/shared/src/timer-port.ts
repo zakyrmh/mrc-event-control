@@ -28,19 +28,23 @@ export interface PrepareTimerOptions {
   segmentAttemptId?: string | null
   phaseType: string
   initialMs: number
+  actorId?: string | null
 }
 
 export interface StartTimerOptions {
   readinessToken?: string | null
+  actorId?: string | null
 }
 
 export interface AdjustTimerOptions {
   deltaMs: number
   reason: string
+  actorId?: string | null
 }
 
 export interface ResetTimerOptions {
   reason: string
+  actorId?: string | null
 }
 
 export interface ReconcileTimerOptions {
@@ -48,6 +52,7 @@ export interface ReconcileTimerOptions {
   offsetMs?: number
   reason: string
   authorityReference?: string
+  actorId?: string | null
 }
 
 /**
