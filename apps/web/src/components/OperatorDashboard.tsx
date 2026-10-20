@@ -238,7 +238,7 @@ export function OperatorDashboard() {
           <p>Kontrol lokal arena, alur fase, aba-aba timer, dan pencatatan gol</p>
         </div>
         <div>
-          <button className="btn btn-secondary" onClick={refreshArena} disabled={loading}>
+          <button className="btn btn-ghost" onClick={refreshArena} disabled={loading}>
             {loading ? 'Memuat...' : 'Segarkan'}
           </button>
         </div>
@@ -247,7 +247,7 @@ export function OperatorDashboard() {
       {errorMessage && (
         <div className="error-banner">
           <span>{errorMessage}</span>
-          <button className="btn btn-secondary" onClick={() => setErrorMessage(null)}>
+          <button className="btn btn-outline" onClick={() => setErrorMessage(null)}>
             Tutup
           </button>
         </div>
@@ -257,18 +257,22 @@ export function OperatorDashboard() {
         <div className="card empty-state">
           <h2>Tidak Ada Pertandingan Aktif di Arena</h2>
           <p>Pilih salah satu pertandingan terjadwal di bawah ini untuk memulai:</p>
-          <div className="controls-row" style={{ justifyContent: 'center', marginTop: '1rem' }}>
+          <div className="controls-row" style={{ justifyContent: 'center', marginTop: '1.5rem' }}>
             {scheduledMatches.map((m) => (
               <button
                 key={m.id}
-                className="btn btn-primary"
+                className="btn btn-ghost"
                 onClick={() => handleSelectMatch(m.id, m.matchVersion)}
               >
                 Pilih Match #{m.sequence}: {m.teamA.name} vs {m.teamB.name}
               </button>
             ))}
           </div>
-          {scheduledMatches.length === 0 && <p>Tidak ada pertandingan berstatus SCHEDULED.</p>}
+          {scheduledMatches.length === 0 && (
+            <p style={{ marginTop: '1rem', color: 'var(--color-stone)' }}>
+              Tidak ada pertandingan berstatus SCHEDULED.
+            </p>
+          )}
         </div>
       ) : (
         <div className="dashboard-grid">
@@ -276,24 +280,20 @@ export function OperatorDashboard() {
           <div>
             {/* Score & Match Status Board */}
             <div className="score-display">
-              <div className="team-box">
+              <div className="team-box team-a">
                 <div className="team-name">{activeMatch.teamA.name}</div>
-                <div className="team-score">{activeMatch.score.goalsA}</div>
-                <span className="badge badge-info">{activeMatch.teamA.code}</span>
+                <div className="team-score tabular-nums">{activeMatch.score.goalsA}</div>
+                <span className="status-pill neutral">{activeMatch.teamA.code}</span>
               </div>
               <div className="vs-box">
-                <div>VS</div>
-                <div style={{ marginTop: '0.5rem' }}>
-                  <span className="badge badge-success">{activeMatch.phase ?? 'PRE_MATCH'}</span>
-                </div>
-                <div style={{ marginTop: '0.25rem' }}>
-                  <span className="badge badge-info">{activeMatch.status}</span>
-                </div>
+                <span className="vs-text">VS</span>
+                <span className="status-pill info">{activeMatch.phase ?? 'PRE_MATCH'}</span>
+                <span className="status-pill success">{activeMatch.status}</span>
               </div>
-              <div className="team-box">
+              <div className="team-box team-b">
                 <div className="team-name">{activeMatch.teamB.name}</div>
-                <div className="team-score">{activeMatch.score.goalsB}</div>
-                <span className="badge badge-info">{activeMatch.teamB.code}</span>
+                <div className="team-score tabular-nums">{activeMatch.score.goalsB}</div>
+                <span className="status-pill neutral">{activeMatch.teamB.code}</span>
               </div>
             </div>
 
@@ -301,7 +301,7 @@ export function OperatorDashboard() {
             <div className="card">
               <h2>
                 <span>Kontrol Fase & Start Timer</span>
-                {readinessToken && <span className="badge badge-armed">ARMED / SIAP ABA-ABA</span>}
+                {readinessToken && <span className="status-pill armed">ARMED / SIAP ABA-ABA</span>}
               </h2>
 
               {/* Pre-match progression */}
@@ -360,7 +360,7 @@ export function OperatorDashboard() {
               {activeMatch.phase === 'READY' && activeMatch.segments.length > 0 && (
                 <div className="controls-row">
                   {!readinessToken ? (
-                    <button className="btn btn-warning" onClick={handleArmStart}>
+                    <button className="btn btn-primary" onClick={handleArmStart}>
                       Review & Arm Start (match.arm-start)
                     </button>
                   ) : (
@@ -368,7 +368,7 @@ export function OperatorDashboard() {
                       <button className="btn btn-success" onClick={handleExecuteStart}>
                         Mulai Pertandingan Sekarang (START ABA-ABA)
                       </button>
-                      <button className="btn btn-danger" onClick={handleDisarmStart}>
+                      <button className="btn btn-outline" onClick={handleDisarmStart}>
                         Batal Kesiapan (Disarm)
                       </button>
                     </>
@@ -386,7 +386,7 @@ export function OperatorDashboard() {
                     Jeda (PAUSE)
                   </button>
                   <button
-                    className="btn btn-dark"
+                    className="btn btn-ghost"
                     onClick={() => sendMatchCommand('phase.advance', { targetPhase: 'INTERMISSION' })}
                   >
                     Istirahat (INTERMISSION)
@@ -429,15 +429,15 @@ export function OperatorDashboard() {
               <h2>
                 <span>Pencatatan Gol (Soccer)</span>
                 {activeGoalIntent ? (
-                  <span className="badge badge-success">INTENT READY: {activeGoalIntent.id.slice(0, 8)}</span>
+                  <span className="status-pill success">INTENT READY: {activeGoalIntent.id.slice(0, 8)}</span>
                 ) : (
-                  <span className="badge badge-warning">TIDAK ADA INTENT READY</span>
+                  <span className="status-pill warning">TIDAK ADA INTENT READY</span>
                 )}
               </h2>
 
               <div className="controls-row">
                 <button
-                  className="btn btn-primary"
+                  className="btn btn-ghost"
                   disabled={!activeGoalIntent}
                   onClick={() =>
                     sendMatchCommand('goal.add', {
@@ -449,7 +449,7 @@ export function OperatorDashboard() {
                   +1 Gol Tim A ({activeMatch.teamA.name})
                 </button>
                 <button
-                  className="btn btn-primary"
+                  className="btn btn-ghost"
                   disabled={!activeGoalIntent}
                   onClick={() =>
                     sendMatchCommand('goal.add', {
@@ -462,7 +462,7 @@ export function OperatorDashboard() {
                 </button>
                 {!activeGoalIntent && (
                   <button
-                    className="btn btn-secondary"
+                    className="btn btn-outline"
                     onClick={() =>
                       sendMatchCommand('goal.prepare-next', {
                         previousGoalIntentId: 'last-consumed-id',
@@ -483,7 +483,7 @@ export function OperatorDashboard() {
                   {activeMatch.status !== 'COMPLETED' && (
                     <>
                       <button
-                        className="btn btn-secondary"
+                        className="btn btn-ghost"
                         onClick={() =>
                           sendMatchCommand('result.draft', {
                             decisionText: `Hasil: Tim A (${activeMatch.score.goalsA}) - Tim B (${activeMatch.score.goalsB})`,
@@ -496,7 +496,7 @@ export function OperatorDashboard() {
                         Simpan Draf Hasil (result.draft)
                       </button>
                       <button
-                        className="btn btn-success"
+                        className="btn btn-primary"
                         onClick={() =>
                           sendMatchCommand('result.finalize', {
                             draftRevisionId: 'rev-id',
@@ -508,7 +508,7 @@ export function OperatorDashboard() {
                     </>
                   )}
                   {activeMatch.status === 'COMPLETED' && (
-                    <span className="badge badge-success">PERTANDINGAN TELAH RESMI COMPLETED</span>
+                    <span className="status-pill success">PERTANDINGAN TELAH RESMI COMPLETED</span>
                   )}
                 </div>
               </div>
@@ -519,19 +519,19 @@ export function OperatorDashboard() {
           <div>
             <div className="card">
               <h2>Preview Kontrak Siaran (Overlay)</h2>
-              <div className="overlay-preview">
+              <div className="overlay-preview-island">
                 <div className="overlay-banner">
                   <span>{activeMatch.category.label}</span>
                   <span>{activeMatch.phase ?? 'PRE_MATCH'}</span>
                 </div>
                 <div className="overlay-score-bar">
                   <span>{activeMatch.teamA.code}</span>
-                  <span style={{ color: '#38bdf8' }}>
+                  <span className="overlay-score-numbers tabular-nums">
                     {activeMatch.score.goalsA} - {activeMatch.score.goalsB}
                   </span>
                   <span>{activeMatch.teamB.code}</span>
                 </div>
-                <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: '#94a3b8' }}>
+                <div className="overlay-meta">
                   Status: {activeMatch.status} | Versi: {activeMatch.matchVersion}
                 </div>
               </div>
@@ -539,10 +539,12 @@ export function OperatorDashboard() {
 
             <div className="card">
               <h2>Informasi Identitas Beku</h2>
-              <p><strong>Kategori:</strong> {activeMatch.category.label} ({activeMatch.category.code})</p>
-              <p><strong>Tim A:</strong> {activeMatch.teamA.name} ({activeMatch.teamA.institution ?? '-'})</p>
-              <p><strong>Tim B:</strong> {activeMatch.teamB.name} ({activeMatch.teamB.institution ?? '-'})</p>
-              <p><strong>Arena:</strong> Arena Utama (Versi #{arena?.arenaVersion})</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '14px' }}>
+                <p><strong>Kategori:</strong> {activeMatch.category.label} ({activeMatch.category.code})</p>
+                <p><strong>Tim A:</strong> {activeMatch.teamA.name} ({activeMatch.teamA.institution ?? '-'})</p>
+                <p><strong>Tim B:</strong> {activeMatch.teamB.name} ({activeMatch.teamB.institution ?? '-'})</p>
+                <p><strong>Arena:</strong> Arena Utama (Versi #{arena?.arenaVersion})</p>
+              </div>
             </div>
           </div>
         </div>

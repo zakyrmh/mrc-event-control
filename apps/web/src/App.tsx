@@ -4,42 +4,36 @@ import { OperatorDashboard } from './components/OperatorDashboard'
 import './App.css'
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'admin' | 'operator'>('operator')
+  const [activeTab, setActiveTab] = useState<'operator' | 'admin'>('operator')
 
   return (
-    <main>
-      <nav style={{ display: 'flex', gap: '1rem', padding: '1rem 1.5rem', background: '#0f172a', color: '#fff' }}>
-        <button
-          onClick={() => setActiveTab('operator')}
-          style={{
-            background: activeTab === 'operator' ? '#2563eb' : 'transparent',
-            color: '#fff',
-            border: 'none',
-            padding: '0.5rem 1rem',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontWeight: 600,
-          }}
-        >
-          Dashboard Operator Arena
-        </button>
-        <button
-          onClick={() => setActiveTab('admin')}
-          style={{
-            background: activeTab === 'admin' ? '#2563eb' : 'transparent',
-            color: '#fff',
-            border: 'none',
-            padding: '0.5rem 1rem',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontWeight: 600,
-          }}
-        >
-          Manajemen Tim & Jadwal
-        </button>
-      </nav>
-      {activeTab === 'operator' ? <OperatorDashboard /> : <AdminTeamManagement />}
-    </main>
+    <>
+      <header className="app-header">
+        <div className="app-brand">
+          <span className="app-brand-title">MRC X 2026</span>
+          <span className="app-brand-badge">Event Control</span>
+        </div>
+        <nav className="app-nav">
+          <button
+            type="button"
+            className={`app-nav-button ${activeTab === 'operator' ? 'active' : ''}`}
+            onClick={() => setActiveTab('operator')}
+          >
+            Dashboard Operator Arena
+          </button>
+          <button
+            type="button"
+            className={`app-nav-button ${activeTab === 'admin' ? 'active' : ''}`}
+            onClick={() => setActiveTab('admin')}
+          >
+            Manajemen Tim & Jadwal
+          </button>
+        </nav>
+      </header>
+      <main className="app-main">
+        {activeTab === 'operator' ? <OperatorDashboard /> : <AdminTeamManagement />}
+      </main>
+    </>
   )
 }
 
