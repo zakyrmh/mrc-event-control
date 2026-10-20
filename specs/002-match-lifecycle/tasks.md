@@ -12,7 +12,7 @@ Semua checkbox belum selesai. Cakupan ML-01–ML-08 [spec](spec.md). Istilah men
 
 ## Integrasi — Setelah 003 E-08
 
-- [ ] L-04 — Setelah L-03 dan 003 E-08, implementasikan pilih pertama/select-resume/release/advance/pause/postpone dengan engine timer, matriks state gabungan dan versi arena+match; first attempt PREPARED→ACTIVE atomik. Selesai: TC-02/03/12, persist-before-broadcast dan atomic rollback lulus.
+- [x] L-04 — Setelah L-03 dan 003 E-08, implementasikan pilih pertama/select-resume/release/advance/pause/postpone dengan engine timer, matriks state gabungan dan versi arena+match; first attempt PREPARED→ACTIVE atomik. Selesai: TC-02/03/12, snapshot tim beku atomik, persist-before-broadcast dan atomic rollback lulus (`apps/server/test/match-lifecycle-integration.test.ts`). Bukti: [L04_MATCH_INTEGRATION_VALIDATION.md](../../docs/03-quality/L04_MATCH_INTEGRATION_VALIDATION.md).
 - [ ] L-05 — Setelah L-04, override/ulang segmen berizin beserta impact review dan audit. Selesai: ML-03/04 dan TC-04/07 sukses/penolakan lulus.
 - [ ] L-06 — Setelah L-05, GoalIntent sekali pakai/rearm eksplisit, event gol Soccer/goal.reassign atomik dan UI sisi tetap; TC-28/32/37 termasuk respons 0 ms. Selesai: TC-08/22, gol negatif/duplikat/attempt terganti ditangani benar.
 - [ ] L-07 — Setelah L-06, draft/final/reopen/refinalize/cancel-correction. Selesai: TC-09/10/19, hasil resmi lama terlindungi dan timer aktif menghalangi finalisasi.

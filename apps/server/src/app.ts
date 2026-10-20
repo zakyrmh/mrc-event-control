@@ -8,7 +8,9 @@ import Fastify, {
 import type { ApiErrorEnvelope, FieldError } from '@mrc-x/shared/server'
 import type { PrismaClient } from '@prisma/client'
 import { registerAuth, type AuthOptions } from './auth.js'
+import { registerMatchRoutes } from './match-routes.js'
 import { registerTeamRoutes } from './team-routes.js'
+import type { TimerService } from './timer-service.js'
 
 export type ReadinessResult =
   | { ready: true; details?: Record<string, string> }
@@ -17,6 +19,7 @@ export type ReadinessResult =
 export interface BuildServerOptions {
   auth?: AuthOptions
   client?: PrismaClient
+  timerService?: TimerService
   logger?: FastifyServerOptions['logger']
   readiness?: () => ReadinessResult | Promise<ReadinessResult>
 }
@@ -101,6 +104,7 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   const client = options.client ?? options.auth?.client
   if (client !== undefined) {
     registerTeamRoutes(server, client)
+    registerMatchRoutes(server, client, options.timerService)
   }
 
   server.setNotFoundHandler((request, reply) => {

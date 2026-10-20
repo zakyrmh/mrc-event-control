@@ -262,9 +262,16 @@ export function evaluateMatchTransition(
         }
       }
 
+      let nextStatus: MatchStatus = currentStatus
+      if (target === 'FINISHED') {
+        nextStatus = 'COMPLETED'
+      } else if (target === 'COMPETITION') {
+        nextStatus = 'IN_PROGRESS'
+      }
+
       return {
         allowed: true,
-        targetStatus: target === 'FINISHED' ? 'COMPLETED' : currentStatus,
+        targetStatus: nextStatus,
         targetPhase: target,
       }
     }
