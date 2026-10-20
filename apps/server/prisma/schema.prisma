@@ -64,6 +64,7 @@ model Team {
   memberships GroupMembership[] @relation("MembershipTeamCategory")
   matchesAsTeamA Match[]        @relation("MatchTeamA")
   matchesAsTeamB Match[]        @relation("MatchTeamB")
+  matchParticipants MatchParticipant[]
 
   @@unique([id, categoryId])
   @@unique([categoryId, code])
@@ -196,24 +197,33 @@ model BackupManifest {
 }
 
 model Match {
-  id           String            @id
-  categoryId   String
-  groupId      String?
-  stageLabel   String?
-  scheduledAt  DateTime?
-  sequence     Int
-  teamAId      String
-  teamBId      String
-  status       String            @default("SCHEDULED")
-  phase        String?
-  matchVersion Int               @default(1)
-  hasStarted   Boolean           @default(false)
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-  category     Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  group        CompetitionGroup? @relation(fields: [groupId, categoryId], references: [id, categoryId], onDelete: Restrict, onUpdate: Cascade)
-  teamA        Team              @relation("MatchTeamA", fields: [teamAId, categoryId], references: [id, categoryId], onDelete: Restrict, onUpdate: Cascade)
-  teamB        Team              @relation("MatchTeamB", fields: [teamBId, categoryId], references: [id, categoryId], onDelete: Restrict, onUpdate: Cascade)
+  id                String            @id
+  categoryId        String
+  groupId           String?
+  stageLabel        String?
+  scheduledAt       DateTime?
+  sequence          Int
+  teamAId           String
+  teamBId           String
+  status            String            @default("SCHEDULED")
+  phase             String?
+  resumePhase       String?
+  matchVersion      Int               @default(1)
+  hasStarted        Boolean           @default(false)
+  currentSegmentId  String?
+  teamASnapshotJson String?
+  teamBSnapshotJson String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  category          Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  group             CompetitionGroup? @relation(fields: [groupId, categoryId], references: [id, categoryId], onDelete: Restrict, onUpdate: Cascade)
+  teamA             Team              @relation("MatchTeamA", fields: [teamAId, categoryId], references: [id, categoryId], onDelete: Restrict, onUpdate: Cascade)
+  teamB             Team              @relation("MatchTeamB", fields: [teamBId, categoryId], references: [id, categoryId], onDelete: Restrict, onUpdate: Cascade)
+  activeInArena     ArenaState?       @relation("ArenaActiveMatch")
+  participants      MatchParticipant[]
+  segments          SegmentAttempt[]
+  goals             GoalEvent[]
+  results           ResultRevision[]
 
   @@index([categoryId])
   @@index([groupId])
@@ -221,4 +231,97 @@ model Match {
   @@index([teamBId])
   @@index([status])
   @@index([sequence])
+}
+
+model ArenaState {
+  id            String   @id // 'main'
+  activeMatchId String?  @unique
+  arenaVersion  Int      @default(1)
+  updatedAt     DateTime @updatedAt
+  activeMatch   Match?   @relation("ArenaActiveMatch", fields: [activeMatchId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+}
+
+model MatchParticipant {
+  id           String   @id
+  matchId      String
+  side         String   // 'A' | 'B'
+  teamId       String
+  attendance   String   @default("UNKNOWN") // 'UNKNOWN', 'PRESENT', 'ABSENT'
+  verification String   @default("PENDING") // 'PENDING', 'READY', 'NOT_READY', 'FAILED'
+  note         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  match        Match    @relation(fields: [matchId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  team         Team     @relation(fields: [teamId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([matchId, side])
+  @@index([matchId])
+  @@index([teamId])
+}
+
+model SegmentAttempt {
+  id                  String      @id
+  matchId             String
+  kind                String      // 'START', 'ROUND', 'HALF'
+  ordinal             Int         // 1, 2, ...
+  attempt             Int         // 1, 2, ...
+  supersedesAttemptId String?
+  status              String      @default("PREPARED") // 'PREPARED', 'ACTIVE', 'ENDED', 'REPLACED'
+  activatedAt         DateTime?
+  startedAt           DateTime?
+  endedAt             DateTime?
+  durationMs          Int?
+  reason              String?
+  actorId             String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  match               Match       @relation(fields: [matchId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  goals               GoalEvent[]
+
+  @@unique([matchId, ordinal, attempt])
+  @@index([matchId])
+}
+
+model GoalEvent {
+  id               String          @id
+  matchId          String
+  segmentAttemptId String
+  side             String          // 'A' | 'B'
+  delta            Int             // 1 or -1
+  occurredAtMs     Int?
+  reason           String?
+  actorId          String?
+  commandId        String?
+  goalIntentId     String?
+  correctsGoalId   String?
+  createdAt        DateTime        @default(now())
+  match            Match           @relation(fields: [matchId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  segmentAttempt   SegmentAttempt  @relation(fields: [segmentAttemptId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  correctsGoal     GoalEvent?      @relation("GoalCorrection", fields: [correctsGoalId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  correctedBy      GoalEvent[]     @relation("GoalCorrection")
+
+  @@index([matchId])
+  @@index([segmentAttemptId])
+}
+
+model ResultRevision {
+  id                 String    @id
+  matchId            String
+  revision           Int       // 1, 2, ...
+  status             String    // 'DRAFT', 'FINAL', 'SUPERSEDED'
+  decisionText       String?
+  winnerTeamId       String?
+  finalGoalsA        Int?
+  finalGoalsB        Int?
+  refereeReference   String?
+  authorityReference String?
+  reason             String?
+  finalizedBy        String?
+  finalizedAt        DateTime?
+  previousRevisionId String?
+  createdAt          DateTime  @default(now())
+  match              Match     @relation(fields: [matchId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([matchId, revision])
+  @@index([matchId])
 }

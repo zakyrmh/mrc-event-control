@@ -6,9 +6,9 @@ Semua checkbox belum selesai. Cakupan ML-01–ML-08 [spec](spec.md). Istilah men
 
 ## Domain Awal — Sebelum 003
 
-- [ ] L-01 — Setelah 001 F-01–F-06 dan T-01/T-03, tambah migrasi match/arena/peserta/segmen beserta snapshot identitas. Selesai: constraint, satu match aktif dan category mismatch diuji pada SQLite.
-- [ ] L-02 — Setelah L-01, implementasikan pure transition/role/override guards. Selesai: semua edge normal dan contoh larangan TC-03/04/12 dibuktikan; keputusan D yang memblokir tidak ditebak.
-- [ ] L-03 — Setelah L-02, definisikan port timer atomik, segmen/attempt dan snapshot recovery bersama 003. Selesai: tipe/semantik disepakati dan fake port hanya untuk tes guard; mesin timer belum dinyatakan tersedia.
+- [x] L-01 — Setelah 001 F-01–F-06 dan T-01/T-03, tambah migrasi match/arena/peserta/segmen beserta snapshot identitas. Selesai: constraint, satu match aktif dan category mismatch diuji pada SQLite.
+- [x] L-02 — Setelah L-01, implementasikan pure transition/role/override guards. Selesai: semua edge normal dan contoh larangan TC-03/04/12 dibuktikan; keputusan D yang memblokir tidak ditebak.
+- [x] L-03 — Setelah L-02, definisikan port timer atomik, segmen/attempt dan snapshot recovery bersama 003. Selesai: tipe/semantik disepakati dan fake port hanya untuk tes guard; mesin timer belum dinyatakan tersedia.
 
 ## Integrasi — Setelah 003 E-08
 
