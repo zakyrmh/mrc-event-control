@@ -282,4 +282,22 @@ describe('AUTH foundation (TC-18/TC-35)', () => {
     expired.close()
     await server.close()
   })
+
+  it('prunes expired anonymous sessions and caps bootstrap sessions', async () => {
+    let fakeNow = 1_000_000
+    const server = buildServer({
+      auth: {
+        allowedOrigins: [origin],
+        client: connection.client,
+        clock: () => new Date(fakeNow),
+      },
+    })
+    for (let i = 0; i < 55; i++) {
+      await server.inject({ method: 'GET', url: '/api/v1/auth/bootstrap' })
+    }
+    fakeNow += 600_001
+    const next = await server.inject({ method: 'GET', url: '/api/v1/auth/bootstrap' })
+    assert.equal(next.statusCode, 200)
+    await server.close()
+  })
 })

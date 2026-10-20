@@ -47,6 +47,10 @@ logs/
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
+.agents/
+.claude/
+.windsurf/
+skills-lock.json
 .DS_Store
 Thumbs.db
 *.swp

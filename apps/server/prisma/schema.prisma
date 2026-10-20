@@ -29,6 +29,7 @@ model Category {
   updatedAt DateTime           @updatedAt
   groups    CompetitionGroup[]
   teams     Team[]
+  matches   Match[]
 }
 
 model CompetitionGroup {
@@ -41,6 +42,7 @@ model CompetitionGroup {
   updatedAt  DateTime          @updatedAt
   category   Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   members    GroupMembership[] @relation("MembershipGroupCategory")
+  matches    Match[]
 
   @@unique([id, categoryId])
   @@unique([categoryId, name])
@@ -60,6 +62,8 @@ model Team {
   updatedAt   DateTime          @updatedAt
   category    Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   memberships GroupMembership[] @relation("MembershipTeamCategory")
+  matchesAsTeamA Match[]        @relation("MatchTeamA")
+  matchesAsTeamB Match[]        @relation("MatchTeamB")
 
   @@unique([id, categoryId])
   @@unique([categoryId, code])
@@ -189,4 +193,32 @@ model BackupManifest {
   storageEpoch            Int
   restoreLineage          String
   verifyStatus            String
+}
+
+model Match {
+  id           String            @id
+  categoryId   String
+  groupId      String?
+  stageLabel   String?
+  scheduledAt  DateTime?
+  sequence     Int
+  teamAId      String
+  teamBId      String
+  status       String            @default("SCHEDULED")
+  phase        String?
+  matchVersion Int               @default(1)
+  hasStarted   Boolean           @default(false)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  category     Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  group        CompetitionGroup? @relation(fields: [groupId, categoryId], references: [id, categoryId], onDelete: Restrict, onUpdate: Cascade)
+  teamA        Team              @relation("MatchTeamA", fields: [teamAId, categoryId], references: [id, categoryId], onDelete: Restrict, onUpdate: Cascade)
+  teamB        Team              @relation("MatchTeamB", fields: [teamBId, categoryId], references: [id, categoryId], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([categoryId])
+  @@index([groupId])
+  @@index([teamAId])
+  @@index([teamBId])
+  @@index([status])
+  @@index([sequence])
 }

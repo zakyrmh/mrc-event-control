@@ -97,3 +97,48 @@ export const commandReceiptSchema = z.strictObject({
   snapshotUrl: z.string().startsWith('/api/v1/'),
 })
 export type CommandReceipt = z.infer<typeof commandReceiptSchema>
+
+export const teamImportPreviewInputSchema = z.strictObject({
+  csvContent: z.string().min(1).max(5 * 1024 * 1024),
+  expectedRevision: revisionSchema,
+})
+export type TeamImportPreviewInput = z.infer<typeof teamImportPreviewInputSchema>
+
+export const teamImportCommitInputSchema = z.strictObject({
+  previewHash: nonBlankStringSchema,
+  expectedRevision: revisionSchema,
+})
+export type TeamImportCommitInput = z.infer<typeof teamImportCommitInputSchema>
+
+export const categoryPatchInputSchema = z.strictObject({
+  expectedRevision: revisionSchema,
+  label: nameSchema.optional(),
+  enabled: z.boolean().optional(),
+})
+export type CategoryPatchInput = z.infer<typeof categoryPatchInputSchema>
+
+export const groupPatchInputSchema = z.strictObject({
+  expectedRevision: revisionSchema,
+  name: nameSchema.optional(),
+  enabled: z.boolean().optional(),
+})
+export type GroupPatchInput = z.infer<typeof groupPatchInputSchema>
+
+export const teamPatchInputSchema = z.strictObject({
+  expectedRevision: revisionSchema,
+  name: nameSchema.optional(),
+  institution: nullableOptionalString(200),
+  groupId: idSchema.nullable().optional(),
+  archived: z.boolean().optional(),
+})
+export type TeamPatchInput = z.infer<typeof teamPatchInputSchema>
+
+export const matchSchedulePatchInputSchema = z.strictObject({
+  expectedMatchVersion: revisionSchema,
+  stageLabel: nullableOptionalString(120),
+  scheduledAt: utcDateTimeSchema.nullable().optional(),
+  sequence: z.int().positive().optional(),
+  teamAId: idSchema.optional(),
+  teamBId: idSchema.optional(),
+})
+export type MatchSchedulePatchInput = z.infer<typeof matchSchedulePatchInputSchema>

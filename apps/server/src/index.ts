@@ -57,6 +57,14 @@ export async function startServer(
       secureCookies: process.env.COOKIE_SECURE === 'true',
     },
     logger: true,
+    readiness: async () => {
+      try {
+        await connection.client.$queryRawUnsafe('SELECT 1')
+        return { ready: true, details: { database: 'connected' } }
+      } catch {
+        return { ready: false, reason: 'Database connection is unavailable' }
+      }
+    },
   })
   const io = registerControlSockets(server.server, {
     allowedOrigins,

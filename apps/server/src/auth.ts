@@ -168,6 +168,16 @@ export function registerAuth(server: FastifyInstance, options: AuthOptions): voi
   server.decorateRequest('authPrincipal', null)
 
   server.get('/api/v1/auth/bootstrap', async (_request, reply) => {
+    const now = clock().getTime()
+    if (anonymousSessions.size > 50) {
+      for (const [key, session] of anonymousSessions) {
+        if (session.expiresAt <= now) anonymousSessions.delete(key)
+      }
+    }
+    if (anonymousSessions.size >= 500) {
+      const oldestKey = anonymousSessions.keys().next().value
+      if (oldestKey !== undefined) anonymousSessions.delete(oldestKey)
+    }
     const rawSession = token()
     const csrf = csrfForSession(rawSession)
     anonymousSessions.set(digest(rawSession), {

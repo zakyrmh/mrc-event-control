@@ -9,6 +9,8 @@ import {
   matchScheduleInputSchema,
   matchStatusSchema,
   paginationQuerySchema,
+  teamImportCommitInputSchema,
+  teamImportPreviewInputSchema,
   teamInputSchema,
   userRoleSchema,
 } from '../src/browser.js'
@@ -79,6 +81,21 @@ describe('shared DTO contracts', () => {
       institution: null,
       groupId: null,
     }).code, 'A_01')
+  })
+
+  it('validates import preview and commit DTOs', () => {
+    assert.equal(teamImportPreviewInputSchema.safeParse({
+      csvContent: 'categoryCode,teamCode,teamName,institution,groupName\nLF,T1,Team 1,,G1',
+      expectedRevision: 1,
+    }).success, true)
+    assert.equal(teamImportPreviewInputSchema.safeParse({
+      csvContent: '',
+      expectedRevision: 1,
+    }).success, false)
+    assert.equal(teamImportCommitInputSchema.safeParse({
+      previewHash: 'hash-abc',
+      expectedRevision: 1,
+    }).success, true)
   })
 
   it('rejects malformed and unknown fields', () => {

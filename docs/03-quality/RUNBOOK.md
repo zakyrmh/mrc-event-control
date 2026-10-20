@@ -23,7 +23,7 @@ Setelah rilis siap: sambungkan daya stabil/UPS bila tersedia, pastikan ruang pen
 
 ## 2. Pemeriksaan Sebelum Sesi
 
-1. Super-admin mencocokkan kategori, grup, pasangan, jadwal dan durasi dengan keputusan koordinator/juri. Jika durasi belum disahkan, hentikan persiapan fungsi itu dan tanyakan penanggung jawab.
+1. Super-admin mencocokkan kategori, grup, pasangan, jadwal dan durasi dengan keputusan koordinator/juri. Pendaftaran tim atau impor CSV dilakukan melalui antarmuka admin dengan verifikasi pratinjau all-or-nothing (pastikan 0 baris error sebelum commit). Jika durasi belum disahkan, hentikan persiapan fungsi itu dan tanyakan penanggung jawab.
 2. Buka dashboard; pastikan identitas acara, status koneksi server dan penyimpanan baik. Jika ada pemulihan timer, selesaikan pemeriksaan pada bagian 9 sebelum lanjut.
 3. Petugas OBS memasang alamat Browser Source sesuai kartu rilis, ukuran/transparansi sesuai hasil gladi. Periksa label “OBS menerima data”; preview saja belum cukup.
 4. Tampilkan match simulasi, cocokkan kedua tim, gol, waktu dan segmen pada output OBS sebenarnya; lepaskan simulasi sebelum data resmi dipakai.

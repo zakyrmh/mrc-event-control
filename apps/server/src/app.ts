@@ -6,7 +6,9 @@ import Fastify, {
   type FastifyServerOptions,
 } from 'fastify'
 import type { ApiErrorEnvelope, FieldError } from '@mrc-x/shared/server'
+import type { PrismaClient } from '@prisma/client'
 import { registerAuth, type AuthOptions } from './auth.js'
+import { registerTeamRoutes } from './team-routes.js'
 
 export type ReadinessResult =
   | { ready: true; details?: Record<string, string> }
@@ -14,6 +16,7 @@ export type ReadinessResult =
 
 export interface BuildServerOptions {
   auth?: AuthOptions
+  client?: PrismaClient
   logger?: FastifyServerOptions['logger']
   readiness?: () => ReadinessResult | Promise<ReadinessResult>
 }
@@ -93,6 +96,11 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
 
   if (options.auth !== undefined) {
     registerAuth(server, options.auth)
+  }
+
+  const client = options.client ?? options.auth?.client
+  if (client !== undefined) {
+    registerTeamRoutes(server, client)
   }
 
   server.setNotFoundHandler((request, reply) => {

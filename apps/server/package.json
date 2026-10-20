@@ -4,10 +4,10 @@
   "description": "",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
     "build": "pnpm prisma:generate && tsc -p tsconfig.build.json",
-    "start": "node dist/index.js",
-    "bootstrap:admin": "tsx src/bootstrap-admin.ts",
+    "start": "node --env-file-if-exists=.env dist/index.js",
+    "bootstrap:admin": "tsx --env-file-if-exists=.env src/bootstrap-admin.ts",
     "test": "pnpm prisma:generate && node --import tsx --test test/*.test.ts",
     "typecheck": "pnpm prisma:generate && tsc --noEmit",
     "prisma:generate": "prisma generate --config prisma.config.ts",
@@ -23,6 +23,7 @@
     "@prisma/adapter-better-sqlite3": "^7.10.0",
     "@prisma/client": "^7.10.0",
     "better-sqlite3": "^12.11.1",
+    "dotenv": "^18.0.7",
     "fastify": "^5.12.5",
     "socket.io": "^4.8.4",
     "zod": "^4.6.5"
