@@ -6,9 +6,9 @@ Semua checkbox belum selesai. Cakupan ML-01–ML-08 [spec](spec.md). Istilah men
 
 ## Domain Awal — Sebelum 003
 
-- [x] L-01 — Setelah 001 F-01–F-06 dan T-01/T-03, tambah migrasi match/arena/peserta/segmen beserta snapshot identitas. Selesai: constraint, satu match aktif dan category mismatch diuji pada SQLite.
-- [x] L-02 — Setelah L-01, implementasikan pure transition/role/override guards. Selesai: semua edge normal dan contoh larangan TC-03/04/12 dibuktikan; keputusan D yang memblokir tidak ditebak.
-- [x] L-03 — Setelah L-02, definisikan port timer atomik, segmen/attempt dan snapshot recovery bersama 003. Selesai: tipe/semantik disepakati dan fake port hanya untuk tes guard; mesin timer belum dinyatakan tersedia.
+- [x] L-01 — Setelah 001 F-01–F-06 dan T-01/T-03, tambah migrasi match/arena/peserta/segmen beserta snapshot identitas. Selesai: constraint, satu match aktif (`ArenaState`), peserta unik per sisi (`MatchParticipant`), segmen unik per ordinal/attempt (`SegmentAttempt`), dan revisi hasil unik (`ResultRevision`) diuji pada SQLite (`apps/server/test/match-lifecycle-foundation.test.ts`). Bukti: [L01_L03_MATCH_LIFECYCLE_FOUNDATION_VALIDATION.md](../../docs/03-quality/L01_L03_MATCH_LIFECYCLE_FOUNDATION_VALIDATION.md).
+- [x] L-02 — Setelah L-01, implementasikan pure transition/role/override guards. Selesai: semua edge normal dan contoh larangan TC-03/04/12 dibuktikan (`packages/shared/test/lifecycle-fsm.test.ts`); keputusan D yang memblokir tidak ditebak. Bukti: [L01_L03_MATCH_LIFECYCLE_FOUNDATION_VALIDATION.md](../../docs/03-quality/L01_L03_MATCH_LIFECYCLE_FOUNDATION_VALIDATION.md).
+- [x] L-03 — Setelah L-02, definisikan port timer atomik, segmen/attempt dan snapshot recovery bersama 003. Selesai: tipe/semantik antarmuka `TimerPort` disepakati dan `FakeTimerPort` deterministik digunakan untuk tes guard (`packages/shared/src/timer-port.ts`); mesin timer belum dinyatakan tersedia. Bukti: [L01_L03_MATCH_LIFECYCLE_FOUNDATION_VALIDATION.md](../../docs/03-quality/L01_L03_MATCH_LIFECYCLE_FOUNDATION_VALIDATION.md).
 
 ## Integrasi — Setelah 003 E-08
 
