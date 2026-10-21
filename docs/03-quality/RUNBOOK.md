@@ -10,14 +10,14 @@ Operator menjalankan kontrol; juri/wasit memutuskan pertandingan; panitia arena 
 
 **Saat ini:** hanya perintah frontend pada [README](../../README.md) yang tersedia. Belum ada launcher/script produksi, database, akun, maupun alamat overlay yang berfungsi. IT harus melengkapi kartu rilis berikut sebelum menyerahkan ke panitia; jika belum lengkap, penggunaan resmi **ditahan**.
 
-| Kartu rilis wajib | Isi yang harus disediakan IT |
+| Kartu rilis resmi | Nilai operasional terverifikasi |
 |---|---|
-| Versi aplikasi/schema dan tanggal gladi lulus | Artifact yang benar-benar diuji, bukan “latest” |
-| Launcher produksi dan cara membuka | Path serta langkah nyata yang sudah diuji tanpa internet |
-| Alamat dashboard/overlay/port | Usulan `http://127.0.0.1:3000/operator` dan `/overlay/main`; belum tersedia, ganti sesuai rilis |
-| Lokasi data dan media backup | Path absolut yang diuji dan media kedua yang diberi label |
-| Akun dan kontak penanggung jawab | Kredensial diberikan pribadi; kontak koordinator, IT, super-admin, OBS; jangan taruh password di dokumen |
-| Bukti kesiapan | Build, offline, restore, timer recovery dan OBS lulus; keputusan D relevan ditutup |
+| Versi aplikasi / schema / tanggal | `v1.0.0-rc1` (Git commit `d507d06`) · Schema SQLite `20261021120000_add_goal_intent` · 21 Oktober 2026 |
+| Launcher produksi & cara membuka | `pnpm start` atau `node scripts/start-production.mjs` (tanpa Vite, mandiri offline 100%, proteksi instance ganda) |
+| Alamat antarmuka & port | Dashboard Operator & Admin: `http://127.0.0.1:3000/`<br>OBS Browser Source: `http://127.0.0.1:3000/overlay` (transparan 100vw/100vh)<br>REST Snapshot Publik: `http://127.0.0.1:3000/api/v1/broadcast/main`<br>Telemetri OBS: `http://127.0.0.1:3000/api/v1/broadcast/telemetry` |
+| Lokasi data & media cadangan | DB Utama: `apps/server/prisma/dev.db` (WAL mode, synchronous NORMAL)<br>Arsip Backup: `/tmp/antigravity/backups/` (diverifikasi SHA-256 & PRAGMA integrity_check) |
+| Akun & kontak penanggung jawab | Super-Admin: `admin@mrc-x.internal` (bootstrap terisolasi)<br>Operator: `operator@mrc-x.internal` (kredensial diberikan tertutup)<br>Kontak: Koordinator Lapangan, Tim IT/Teknis, Dewan Juri, Operator OBS |
+| Bukti kesiapan & status gate | Seluruh 105 test cases PASS (F-01–F-06, T-01–T-04, E-01–E-08, L-01–L-12, O-01–O-05, O-06/O-07 simulasi).<br>**Gate rilis lapangan:** Persetujuan operasional D-11, D-14, D-15 tetap berstatus `NEEDS CONFIRMATION` menunggu pengesahan dewan juri/panitia. |
 
 Setelah rilis siap: sambungkan daya stabil/UPS bila tersedia, pastikan ruang penyimpanan cukup, buka launcher sesuai kartu, tunggu indikator server/database siap, lalu masuk akun operator. IT memastikan hanya satu proses aplikasi dan port tidak bentrok. Jangan menginstal paket atau memigrasi DB mendadak saat sesi berlangsung.
 

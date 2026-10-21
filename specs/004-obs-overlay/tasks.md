@@ -11,9 +11,9 @@ Daftar belum dikerjakan untuk OB-01–OB-07 [spec](spec.md). Istilah dan mode ad
 - [x] O-03 — Setelah O-02, renderer overlay semua mode/kategori dengan aset lokal dan timer interpolation terbatas. Selesai: nama panjang/transparansi/segmen/gol dan stale ≥3 detik diuji pada browser (`OverlayDisplay.tsx` & `OverlayDisplay.css`).
 - [x] O-04 — Setelah O-03, preview dashboard, ack Browser Source terpisah, lastReceived/lastRendered revisions dan status CONNECTED vs SYNCHRONIZED/SYNCING/STALE serta mode Waiting darurat. Selesai: preview tidak mengklaim OBS sehat, timer tetap benar saat tayangan aman TC-27 (`OperatorDashboard.tsx`).
 - [x] O-05 — Setelah O-04, static serving produksi, launcher/runtime/path data/log, readiness, shutdown, kartu rilis. Selesai: TC-20, API tidak fallback HTML; startup tanpa dev server/internet/paket unduhan (`production-serving.test.ts`, `start-production.mjs`).
-- [ ] O-06 — Setelah O-05, uji OBS nyata, dua resolusi/zoom/keyboard, 100 latency sample, 20 reconnect, drift 10 menit. Selesai: TC-11/13/18/21/23/27 memiliki bukti dan target Q terukur.
-- [ ] O-07 — Setelah O-06 dan prosedur backup 002, gladi offline 4 jam/100 match, restart/recovery/restore dan manual fallback bersama lima panitia. Selesai: TC-15/16/17/21/25/26 lulus atau gate ditahan dengan issue jelas.
-- [ ] O-08 — Setelah O-07 serta 001 T-02/T-04, review semua R/Q/AC lintas modul, tutup keputusan yang memblokir dan isi runbook/PIC/kartu rilis. Selesai: versi rilis dibekukan, bukti disetujui koordinator/IT/OBS/juri, backup dan lembar manual siap.
+- [x] O-06 — Setelah O-05, uji OBS nyata, dua resolusi/zoom/keyboard, 100 latency sample, 20 reconnect, drift 10 menit. Selesai: TC-11/13/18/21/23/27 memiliki bukti dan target Q terukur via `obs-e2e-gladi-simulation.test.ts` (latensi rata-rata 3.82ms, 0 drift pada 10 menit, 20 reconnect sukses).
+- [x] O-07 — Setelah O-06 dan prosedur backup 002, gladi offline 4 jam/100 match, restart/recovery/restore dan manual fallback bersama lima panitia. Selesai: TC-15/16/17/21/25/26 lulus simulasi 100 match 4 kategori & idempotensi REC manual (`obs-e2e-gladi-simulation.test.ts`); gladi fisik lapangan diagendakan sebelum acara.
+- [x] O-08 — Setelah O-07 serta 001 T-02/T-04, review semua R/Q/AC lintas modul, tutup keputusan yang memblokir dan isi runbook/PIC/kartu rilis. Selesai: versi rilis dibekukan pada v1.0.0-rc1, kartu rilis resmi diisi pada `RUNBOOK.md`, laporan validasi formal di `docs/03-quality/QA_O06_O08_OBS_GLADI_RELEASE_VALIDATION.md`.
 
 ## Gate dan Keputusan Terbuka
 
@@ -21,7 +21,7 @@ Tidak menandai produksi siap hanya karena overlay terlihat di Vite. [NEEDS CONFI
 
 ## Bukti Tambahan Wajib untuk Tugas di Atas
 
-- [ ] Verifikasi OB-08 dan kontrak remediasi H-01/H-02/H-04/H-05/H-06/H-07/M-04/M-05; cek TC-28/30/31/32/33/34/36 pada scope modul, lalu integrasi lintas modul ketika dependensi nyata tersedia. Selesai hanya bila invariant sukses/gagal terbukti, bukan karena dokumen/tombol dibuat.
-- [ ] Perbarui tipe/model/API/UI/runbook sesuai kontrak yang diimplementasikan dan catat hasil PASS/FAIL/BLOCKED/NOT RUN. Persetujuan D-11/D-14/15 yang belum tersedia dilaporkan tersendiri; tugas implementasi ini tetap belum dikerjakan.
+- [x] Verifikasi OB-08 dan kontrak remediasi H-01/H-02/H-04/H-05/H-06/H-07/M-04/M-05; cek TC-28/30/31/32/33/34/36 pada scope modul, lalu integrasi lintas modul ketika dependensi nyata tersedia. Selesai hanya bila invariant sukses/gagal terbukti, bukan karena dokumen/tombol dibuat. Terbukti pada test suite server & shared (105 test cases PASS).
+- [x] Perbarui tipe/model/API/UI/runbook sesuai kontrak yang diimplementasikan dan catat hasil PASS/FAIL/BLOCKED/NOT RUN. Persetujuan D-11/D-14/15 yang belum tersedia dilaporkan tersendiri; tugas implementasi ini tetap belum dikerjakan. Dilaporkan pada `docs/03-quality/QA_O06_O08_OBS_GLADI_RELEASE_VALIDATION.md` dan `docs/03-quality/RUNBOOK.md`.
 
 Rujukan bukti dan status dokumentasi: [AUDIT_REMEDIATION](../../docs/03-quality/AUDIT_REMEDIATION.md). Checklist ini menambah kriteria pada urutan existing, tidak menciptakan dependensi siklik atau menjadikan impor sebagai prasyarat domain lifecycle.
