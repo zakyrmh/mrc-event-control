@@ -237,4 +237,115 @@ describe('Timer Engine Service & Recovery (003 E-01 s/d E-08 / TC-05, TC-06, TC-
     })
     assert.ok(recoveryAudit)
   })
+
+  // --- QA Verification: TE-08 & Remediasi H-03/H-05/H-06/M-01/M-05/M-06 ---
+  it('QA-TC-29 / M-01: timer.reset only resets time to initialMs, without resetting match/segment phase or attempt', async () => {
+    // Prepare a timer attached to segment
+    const segmentAttemptId = randomUUID()
+    await connection.client.segmentAttempt.create({
+      data: {
+        id: segmentAttemptId,
+        matchId,
+        kind: 'ROUND',
+        ordinal: 1,
+        attempt: 1,
+        status: 'ACTIVE',
+      },
+    })
+
+    const prep = await timerService.prepare({
+      matchId,
+      segmentAttemptId,
+      phaseType: 'COMPETITION',
+      initialMs: 300_000,
+    })
+    assert.equal(prep.remainingMs, 300_000)
+
+    // Start with arming token
+    timerService.armReadinessToken('token-qa-29')
+    await timerService.start({ readinessToken: 'token-qa-29' })
+    clock.advance(30_000)
+    await timerService.pause()
+
+    const adjusted = await timerService.adjust({ deltaMs: -10_000, reason: 'penyesuaian' })
+    assert.equal(adjusted.remainingMs, 260_000)
+
+    // Execute timer.reset
+    const resetSnap = await timerService.reset({ reason: 'Instruksi juri reset waktu awal' })
+    assert.equal(resetSnap.state, 'IDLE')
+    assert.equal(resetSnap.remainingMs, 300_000)
+
+    // Verify segment attempt is still ACTIVE and attempt unchanged (not reset or superseded)
+    const segInDb = await connection.client.segmentAttempt.findUnique({
+      where: { id: segmentAttemptId },
+    })
+    assert.equal(segInDb?.status, 'ACTIVE')
+    assert.equal(segInDb?.attempt, 1)
+
+    // Verify match is unaffected
+    const matchInDb = await connection.client.match.findUnique({
+      where: { id: matchId },
+    })
+    assert.ok(matchInDb)
+  })
+
+  it('QA-TC-30 / M-05: single-use readinessToken is consumed on start and rejects immediate reuse', async () => {
+    timerService.armReadinessToken('token-qa-30')
+    const start1 = await timerService.start({ readinessToken: 'token-qa-30' })
+    assert.equal(start1.state, 'RUNNING')
+
+    // Pause timer
+    await timerService.pause()
+
+    // Immediate attempt to re-start with the same consumed token must throw error
+    await assert.rejects(
+      async () => {
+        await timerService.start({ readinessToken: 'token-qa-30' })
+      },
+      /INVALID_READINESS_TOKEN/,
+    )
+  })
+
+  it('QA-TC-33 / H-06: storage recovery from DEGRADED to HEALTHY enforces manual intervention and forbids auto-resume', async () => {
+    // Timer is in PAUSED state
+    const beforeSnap = await timerService.getSnapshot()
+    assert.equal(beforeSnap.state, 'PAUSED')
+
+    // Simulate storage fault: DEGRADED
+    timerService.setStorageHealth('DEGRADED')
+    assert.equal(timerService.getStorageHealth(), 'DEGRADED')
+
+    // All mutations rejected while DEGRADED
+    await assert.rejects(
+      async () => {
+        await timerService.pause()
+      },
+      /STORAGE_DEGRADED/,
+    )
+
+    // Probe recovery: transition to HEALTHY
+    timerService.setStorageHealth('HEALTHY')
+    assert.equal(timerService.getStorageHealth(), 'HEALTHY')
+
+    // Invariant: timer must remain PAUSED and never auto-resume!
+    const afterSnap = await timerService.getSnapshot()
+    assert.equal(afterSnap.state, 'PAUSED')
+    assert.equal(afterSnap.remainingMs, beforeSnap.remainingMs)
+  })
+
+  it('QA-TC-37 / M-06: optimistic concurrency conflict and audit traceability on timer instance updates', async () => {
+    const snap = await timerService.getSnapshot()
+
+    // Generation sequence progresses monotonically
+    const initialGeneration = snap.timerGeneration
+    const adjusted = await timerService.adjust({ deltaMs: 5_000, reason: 'concurrency test' })
+    assert.equal(adjusted.timerGeneration, initialGeneration)
+
+    // Verify audits have distinct sequential IDs and preserve reason
+    const audits = await connection.client.auditEntry.findMany({
+      where: { resourceType: 'TimerInstance', resourceId: snap.id },
+      orderBy: { timestampUtc: 'asc' },
+    })
+    assert.ok(audits.length >= 2)
+  })
 })

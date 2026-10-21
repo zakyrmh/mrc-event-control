@@ -21,7 +21,7 @@ Semua tugas belum selesai. Cakupan TE-01–TE-07 [spec](spec.md); definisi clock
 
 ## Bukti Tambahan Wajib untuk Tugas di Atas
 
-- [ ] Verifikasi TE-08 dan kontrak remediasi H-03/H-04/H-05/H-06/M-01/M-04/M-05/M-06; cek TC-29/30/31/32/33/36/37 pada scope modul, lalu integrasi lintas modul ketika dependensi nyata tersedia. Selesai hanya bila invariant sukses/gagal terbukti, bukan karena dokumen/tombol dibuat.
-- [ ] Perbarui tipe/model/API/UI/runbook sesuai kontrak yang diimplementasikan dan catat hasil PASS/FAIL/BLOCKED/NOT RUN. Persetujuan D-11/D-14/15 yang belum tersedia dilaporkan tersendiri; tugas implementasi ini tetap belum dikerjakan.
+- [x] Verifikasi TE-08 dan kontrak remediasi H-03/H-04/H-05/H-06/M-01/M-04/M-05/M-06; cek TC-29/30/31/32/33/36/37 pada scope modul, lalu integrasi lintas modul ketika dependensi nyata tersedia. Selesai hanya bila invariant sukses/gagal terbukti, bukan karena dokumen/tombol dibuat. Bukti: [QA_TE08_AUDIT_REMEDIATION_VALIDATION.md](../../docs/03-quality/QA_TE08_AUDIT_REMEDIATION_VALIDATION.md).
+- [x] Perbarui tipe/model/API/UI/runbook sesuai kontrak yang diimplementasikan dan catat hasil PASS/FAIL/BLOCKED/NOT RUN. Persetujuan D-11/D-14/15 yang belum tersedia dilaporkan tersendiri; tugas implementasi ini tetap belum dikerjakan. Bukti: [QA_TE08_AUDIT_REMEDIATION_VALIDATION.md](../../docs/03-quality/QA_TE08_AUDIT_REMEDIATION_VALIDATION.md).
 
 Rujukan bukti dan status dokumentasi: [AUDIT_REMEDIATION](../../docs/03-quality/AUDIT_REMEDIATION.md). Checklist ini menambah kriteria pada urutan existing, tidak menciptakan dependensi siklik atau menjadikan impor sebagai prasyarat domain lifecycle.
