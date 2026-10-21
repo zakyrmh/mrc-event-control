@@ -142,3 +142,79 @@ export const matchSchedulePatchInputSchema = z.strictObject({
   teamBId: idSchema.optional(),
 })
 export type MatchSchedulePatchInput = z.infer<typeof matchSchedulePatchInputSchema>
+
+// --- Public Broadcast & Overlay Projections (004 OB-01 s/d OB-04) ---
+export const broadcastModeSchema = z.enum(['AUTO', 'WAITING', 'EMERGENCY'])
+export type BroadcastMode = z.infer<typeof broadcastModeSchema>
+
+export const publicTeamProjectionSchema = z.strictObject({
+  id: idSchema,
+  code: codeSchema,
+  name: nameSchema,
+  institution: nullableOptionalString(200),
+})
+export type PublicTeamProjection = z.infer<typeof publicTeamProjectionSchema>
+
+export const publicTimerProjectionSchema = z.strictObject({
+  timerId: idSchema.nullable(),
+  state: z.enum(['IDLE', 'RUNNING', 'PAUSED', 'STOPPED', 'EXPIRED', 'RECOVERY_REQUIRED']),
+  initialMs: z.int().nonnegative(),
+  remainingMs: z.int().nonnegative(),
+  serverNowUtc: utcDateTimeSchema,
+  anchorWallUtc: utcDateTimeSchema.nullable(),
+  timerGeneration: z.int().nonnegative(),
+  syncSeq: z.int().nonnegative(),
+})
+export type PublicTimerProjection = z.infer<typeof publicTimerProjectionSchema>
+
+export const publicMatchProjectionSchema = z.strictObject({
+  matchId: idSchema,
+  sequence: z.int().positive(),
+  stageLabel: nullableOptionalString(120),
+  category: z.strictObject({
+    code: codeSchema,
+    label: nameSchema,
+  }),
+  displayMode: nonBlankStringSchema,
+  phase: matchPhaseSchema.nullable(),
+  status: matchStatusSchema,
+  teamA: publicTeamProjectionSchema,
+  teamB: publicTeamProjectionSchema,
+  scoreA: z.int().nonnegative().nullable(),
+  scoreB: z.int().nonnegative().nullable(),
+  currentSegment: z
+    .strictObject({
+      kind: z.string(),
+      ordinal: z.int().positive(),
+      attempt: z.int().positive(),
+    })
+    .nullable(),
+  timer: publicTimerProjectionSchema,
+  officialWinnerSide: z.enum(['A', 'B', 'DRAW']).nullable(),
+  isOfficialResult: z.boolean(),
+})
+export type PublicMatchProjection = z.infer<typeof publicMatchProjectionSchema>
+
+export const publicBroadcastSnapshotSchema = z.strictObject({
+  runtimeId: nonBlankStringSchema,
+  broadcastRevision: revisionSchema,
+  arenaVersion: revisionSchema,
+  mode: broadcastModeSchema,
+  safeDisplay: z.boolean(),
+  match: publicMatchProjectionSchema.nullable(),
+  serverNowUtc: utcDateTimeSchema,
+})
+export type PublicBroadcastSnapshot = z.infer<typeof publicBroadcastSnapshotSchema>
+
+export const obsTelemetryInputSchema = z.strictObject({
+  clientInstanceId: nonBlankStringSchema,
+  clientRole: z.enum(['OBS_BROWSER_SOURCE', 'DASHBOARD_PREVIEW']),
+  runtimeId: nonBlankStringSchema,
+  lastReceivedRevision: revisionSchema,
+  lastRenderedRevision: revisionSchema,
+  timerGeneration: z.int().nonnegative().optional(),
+  syncSeq: z.int().nonnegative().optional(),
+  renderLatencyMs: z.number().nonnegative().optional(),
+})
+export type ObsTelemetryInput = z.infer<typeof obsTelemetryInputSchema>
+

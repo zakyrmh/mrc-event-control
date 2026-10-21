@@ -6,11 +6,11 @@ Daftar belum dikerjakan untuk OB-01–OB-07 [spec](spec.md). Istilah dan mode ad
 
 ## Urutan Implementasi
 
-- [ ] O-01 — Setelah prasyarat, buat public projection/snapshot dan pengujian penyaringan data. Selesai: empat kategori, hasil resmi/draft, match null dan no-private-fields terbukti.
-- [ ] O-02 — Setelah O-01, integrasikan Socket.IO client/server, outbox events, heartbeat committed revision independen, full snapshot reconnect dan BC resync saat outbox macet. Selesai: event duplicate/out-of-order/gap/runtime baru tidak memundurkan state TC-11/13.
-- [ ] O-03 — Setelah O-02, renderer overlay semua mode/kategori dengan aset lokal dan timer interpolation terbatas. Selesai: nama panjang/transparansi/segmen/gol dan stale ≥3 detik diuji pada browser.
-- [ ] O-04 — Setelah O-03, preview dashboard, ack Browser Source terpisah, lastReceived/lastRendered revisions dan status CONNECTED vs SYNCHRONIZED/SYNCING/STALE serta mode Waiting darurat. Selesai: preview tidak mengklaim OBS sehat, timer tetap benar saat tayangan aman TC-27.
-- [ ] O-05 — Setelah O-04, static serving produksi, launcher/runtime/path data/log, readiness, shutdown, kartu rilis. Selesai: TC-20, API tidak fallback HTML; startup tanpa dev server/internet/paket unduhan.
+- [x] O-01 — Setelah prasyarat, buat public projection/snapshot dan pengujian penyaringan data. Selesai: empat kategori, hasil resmi/draft, match null dan no-private-fields terbukti via `public-projection.test.ts`.
+- [x] O-02 — Setelah O-01, integrasikan Socket.IO client/server, outbox events, heartbeat committed revision independen, full snapshot reconnect dan BC resync saat outbox macet. Selesai: event duplicate/out-of-order/gap/runtime baru tidak memundurkan state TC-11/13 via `broadcast-realtime.test.ts`.
+- [x] O-03 — Setelah O-02, renderer overlay semua mode/kategori dengan aset lokal dan timer interpolation terbatas. Selesai: nama panjang/transparansi/segmen/gol dan stale ≥3 detik diuji pada browser (`OverlayDisplay.tsx` & `OverlayDisplay.css`).
+- [x] O-04 — Setelah O-03, preview dashboard, ack Browser Source terpisah, lastReceived/lastRendered revisions dan status CONNECTED vs SYNCHRONIZED/SYNCING/STALE serta mode Waiting darurat. Selesai: preview tidak mengklaim OBS sehat, timer tetap benar saat tayangan aman TC-27 (`OperatorDashboard.tsx`).
+- [x] O-05 — Setelah O-04, static serving produksi, launcher/runtime/path data/log, readiness, shutdown, kartu rilis. Selesai: TC-20, API tidak fallback HTML; startup tanpa dev server/internet/paket unduhan (`production-serving.test.ts`, `start-production.mjs`).
 - [ ] O-06 — Setelah O-05, uji OBS nyata, dua resolusi/zoom/keyboard, 100 latency sample, 20 reconnect, drift 10 menit. Selesai: TC-11/13/18/21/23/27 memiliki bukti dan target Q terukur.
 - [ ] O-07 — Setelah O-06 dan prosedur backup 002, gladi offline 4 jam/100 match, restart/recovery/restore dan manual fallback bersama lima panitia. Selesai: TC-15/16/17/21/25/26 lulus atau gate ditahan dengan issue jelas.
 - [ ] O-08 — Setelah O-07 serta 001 T-02/T-04, review semua R/Q/AC lintas modul, tutup keputusan yang memblokir dan isi runbook/PIC/kartu rilis. Selesai: versi rilis dibekukan, bukti disetujui koordinator/IT/OBS/juri, backup dan lembar manual siap.

@@ -7,7 +7,13 @@ export interface Clock {
 
 export const systemClock: Clock = {
   nowMonoMs(): number {
-    return Number(process.hrtime.bigint() / 1_000_000n)
+    if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+      return Math.floor(performance.now())
+    }
+    if (typeof process !== 'undefined' && process.hrtime?.bigint) {
+      return Number(process.hrtime.bigint() / 1_000_000n)
+    }
+    return Date.now()
   },
   nowWallUtc(): string {
     return new Date().toISOString()

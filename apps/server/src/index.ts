@@ -1,6 +1,8 @@
-import { pathToFileURL } from 'node:url'
+import { existsSync } from 'node:fs'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { buildServer } from './app.js'
+import { BroadcastService } from './broadcast-service.js'
 import {
   InMemoryControlSocketRegistry,
   registerControlSockets,
@@ -49,6 +51,15 @@ export async function startServer(
     ? configuredOrigins
     : [`http://${host}:${port}`]
   const controlSockets = new InMemoryControlSocketRegistry()
+  const defaultStaticRoot = fileURLToPath(new URL('../../web/dist', import.meta.url))
+  const staticRoot =
+    process.env.STATIC_ROOT ?? (existsSync(defaultStaticRoot) ? defaultStaticRoot : undefined)
+
+  const broadcastService = new BroadcastService({
+    client: connection.client,
+    runtimeId: `runtime-${Date.now()}`,
+  })
+
   const server = buildServer({
     auth: {
       allowedOrigins,
@@ -56,6 +67,8 @@ export async function startServer(
       controlSockets,
       secureCookies: process.env.COOKIE_SECURE === 'true',
     },
+    broadcastService,
+    staticRoot,
     logger: true,
     readiness: async () => {
       try {
@@ -71,6 +84,9 @@ export async function startServer(
     client: connection.client,
     registry: controlSockets,
   })
+  broadcastService.attachSocketServer(io)
+
+  server.addHook('onClose', async () => broadcastService.stopHeartbeat())
   server.addHook('onClose', async () => io.close())
   server.addHook('onClose', async () => connection.disconnect())
 

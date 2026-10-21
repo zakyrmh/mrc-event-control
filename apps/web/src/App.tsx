@@ -1,10 +1,34 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AdminTeamManagement } from './components/AdminTeamManagement'
 import { OperatorDashboard } from './components/OperatorDashboard'
+import { OverlayDisplay } from './components/OverlayDisplay'
 import './App.css'
 
 export function App() {
   const [activeTab, setActiveTab] = useState<'operator' | 'admin'>('operator')
+  const [isOverlayRoute, setIsOverlayRoute] = useState<boolean>(() => {
+    return (
+      window.location.pathname.startsWith('/overlay') ||
+      window.location.search.includes('overlay') ||
+      window.location.hash.includes('overlay')
+    )
+  })
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setIsOverlayRoute(
+        window.location.pathname.startsWith('/overlay') ||
+          window.location.search.includes('overlay') ||
+          window.location.hash.includes('overlay'),
+      )
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
+  if (isOverlayRoute) {
+    return <OverlayDisplay clientRole="OBS_BROWSER_SOURCE" />
+  }
 
   return (
     <>

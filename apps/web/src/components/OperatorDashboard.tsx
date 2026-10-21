@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { OverlayDisplay } from './OverlayDisplay'
 import './OperatorDashboard.css'
 
 interface Team {
@@ -59,6 +60,64 @@ export function OperatorDashboard() {
 
   // CSRF token cache
   const [csrfToken, setCsrfToken] = useState<string>('')
+
+  // Broadcast & OBS Telemetry State (004 O-04 / BC-01 s/d BC-05)
+  const [broadcastMode, setBroadcastMode] = useState<'AUTO' | 'WAITING' | 'EMERGENCY'>('AUTO')
+  const [telemetry, setTelemetry] = useState<{
+    serverConnected: boolean
+    obsConnected: boolean
+    syncStatus: 'SYNCHRONIZED' | 'SYNCING' | 'STALE' | 'DISCONNECTED' | 'UNKNOWN'
+    lastRenderedRevision: number
+    committedRevision: number
+    lastAckReceivedAt: string | null
+    renderLatencyMs: number | null
+  }>({
+    serverConnected: true,
+    obsConnected: false,
+    syncStatus: 'UNKNOWN',
+    lastRenderedRevision: 0,
+    committedRevision: 1,
+    lastAckReceivedAt: null,
+    renderLatencyMs: null,
+  })
+
+  // Poll Broadcast Telemetry every 1.5 seconds
+  useEffect(() => {
+    const fetchTelemetry = async () => {
+      try {
+        const res = await fetch('/api/v1/broadcast/telemetry')
+        if (res.ok) {
+          const data = await res.json()
+          setTelemetry(data)
+        }
+      } catch {
+        setTelemetry((prev) => ({ ...prev, serverConnected: false, syncStatus: 'DISCONNECTED' }))
+      }
+    }
+
+    fetchTelemetry()
+    const timer = setInterval(fetchTelemetry, 1500)
+    return () => clearInterval(timer)
+  }, [])
+
+  const handleSetBroadcastMode = async (mode: 'AUTO' | 'WAITING' | 'EMERGENCY') => {
+    try {
+      const res = await fetch('/api/v1/broadcast/mode', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
+        body: JSON.stringify({ mode }),
+      })
+      if (!res.ok) {
+        throw new Error('Gagal mengganti mode siaran')
+      }
+      setBroadcastMode(mode)
+    } catch (err: any) {
+      setErrorMessage(err.message ?? 'Gagal mengganti mode siaran')
+    }
+  }
 
   // Bootstrap CSRF token on mount
   useEffect(() => {
@@ -515,28 +574,99 @@ export function OperatorDashboard() {
             )}
           </div>
 
-          {/* Right Sidebar: Public Contract Preview Widget */}
+          {/* Right Sidebar: Public Broadcast & Overlay Preview Widget (004 O-03 / O-04) */}
           <div>
+            {/* OBS & Broadcast Status Card (BC-01 s/d BC-05) */}
             <div className="card">
-              <h2>Preview Kontrak Siaran (Overlay)</h2>
-              <div className="overlay-preview-island">
-                <div className="overlay-banner">
-                  <span>{activeMatch.category.label}</span>
-                  <span>{activeMatch.phase ?? 'PRE_MATCH'}</span>
-                </div>
-                <div className="overlay-score-bar">
-                  <span>{activeMatch.teamA.code}</span>
-                  <span className="overlay-score-numbers tabular-nums">
-                    {activeMatch.score.goalsA} - {activeMatch.score.goalsB}
+              <h2>Status Siaran & OBS</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', fontSize: '13px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Server Realtime:</span>
+                  <span className={`status-pill ${telemetry.serverConnected ? 'success' : 'danger'}`}>
+                    {telemetry.serverConnected ? 'CONNECTED' : 'DISCONNECTED'}
                   </span>
-                  <span>{activeMatch.teamB.code}</span>
                 </div>
-                <div className="overlay-meta">
-                  Status: {activeMatch.status} | Versi: {activeMatch.matchVersion}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>OBS Browser Source:</span>
+                  <span className={`status-pill ${telemetry.obsConnected ? 'success' : 'danger'}`}>
+                    {telemetry.obsConnected ? 'CONNECTED' : 'DISCONNECTED'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Status Sinkronisasi:</span>
+                  <span
+                    className={`status-pill ${
+                      telemetry.syncStatus === 'SYNCHRONIZED'
+                        ? 'success'
+                        : telemetry.syncStatus === 'SYNCING'
+                          ? 'info'
+                          : telemetry.syncStatus === 'STALE'
+                            ? 'warning'
+                            : 'neutral'
+                    }`}
+                  >
+                    {telemetry.syncStatus}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Revisi Ter-render / Server:</span>
+                  <span className="tabular-nums" style={{ fontWeight: 600 }}>
+                    #{telemetry.lastRenderedRevision} / #{telemetry.committedRevision}
+                  </span>
+                </div>
+                {telemetry.renderLatencyMs !== null && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Latensi Render:</span>
+                    <span className="tabular-nums">{telemetry.renderLatencyMs.toFixed(1)} ms</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Broadcast Mode Control (OB-02 / TC-27) */}
+              <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--color-stone)' }}>
+                <h3 style={{ fontSize: '13px', fontWeight: 600, marginBottom: '0.5rem' }}>
+                  Kendali Mode Tayangan
+                </h3>
+                {broadcastMode !== 'AUTO' && (
+                  <div className="error-banner" style={{ marginBottom: '0.5rem', fontSize: '12px', padding: '6px 12px' }}>
+                    Tayangan aman aktif ({broadcastMode}); timer pertandingan tetap berjalan.
+                  </div>
+                )}
+                <div className="controls-row" style={{ gap: '0.5rem' }}>
+                  <button
+                    className={`btn ${broadcastMode === 'AUTO' ? 'btn-primary' : 'btn-ghost'}`}
+                    style={{ fontSize: '12px', padding: '6px 10px' }}
+                    onClick={() => handleSetBroadcastMode('AUTO')}
+                  >
+                    Auto
+                  </button>
+                  <button
+                    className={`btn ${broadcastMode === 'WAITING' ? 'btn-primary' : 'btn-ghost'}`}
+                    style={{ fontSize: '12px', padding: '6px 10px' }}
+                    onClick={() => handleSetBroadcastMode('WAITING')}
+                  >
+                    Waiting
+                  </button>
+                  <button
+                    className={`btn ${broadcastMode === 'EMERGENCY' ? 'btn-danger' : 'btn-ghost'}`}
+                    style={{ fontSize: '12px', padding: '6px 10px' }}
+                    onClick={() => handleSetBroadcastMode('EMERGENCY')}
+                  >
+                    Darurat
+                  </button>
                 </div>
               </div>
             </div>
 
+            {/* Live Preview Card */}
+            <div className="card">
+              <h2>Preview Siaran Langsung (Overlay)</h2>
+              <div style={{ background: '#02093a', borderRadius: '8px', padding: '12px', overflow: 'hidden' }}>
+                <OverlayDisplay clientRole="DASHBOARD_PREVIEW" />
+              </div>
+            </div>
+
+            {/* Frozen Identity Card */}
             <div className="card">
               <h2>Informasi Identitas Beku</h2>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '14px' }}>
