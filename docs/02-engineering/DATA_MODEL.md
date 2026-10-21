@@ -15,7 +15,8 @@
 | Team | id, categoryId, code unik per kategori, name, institution opsional, archivedAt; nama sama boleh bila kode berbeda |
 | Match | id, categoryId, groupId opsional, stageLabel, scheduledAt/sequence, teamAId, teamBId, status, phase, resumePhase, matchVersion, hasStarted, currentSegmentId |
 | MatchParticipant | matchId, side A/B, teamId, attendance UNKNOWN/PRESENT/ABSENT, verification PENDING/READY/NOT_READY/FAILED, note; satu record per sisi |
-| ArenaState | id `main`, activeMatchId nullable, arenaVersion; satu match tidak aktif di dua arena; channel main pada baseline |
+| Arena | id, code unik (misal LF-1, SOCCER-1), name, categoryId opsional (filter kategori), enabled, revision; dikelola dinamis oleh Super-Admin |
+| ArenaState | id, arenaId unik (relasi 1:1 ke Arena), activeMatchId nullable, arenaVersion; satu match tidak aktif di dua arena; setiap arena memiliki state mandiri |
 | SegmentAttempt | id, matchId, kind START/ROUND/HALF, ordinal positif, attempt positif, supersedesAttemptId, status PREPARED/ACTIVE/ENDED/REPLACED, reason, actor; ordinal sama/attempt baru untuk ulangan |
 | TimerConfig | id, categoryId, phaseType CALLING/WARMUP/COMPETITION/INTERMISSION, stageLabel opsional, initialMs nullable, approvedBy, sourceNote, revision; null berarti belum diputuskan |
 | TimerInstance | id, matchId, segmentAttemptId nullable, type, state, initialMs snapshot, remainingAtAnchorMs, anchorWallUtc, checkpointWallUtc, runtimeId, checkpointSeq, timerGeneration; durasi salinan tidak berubah saat default diubah |
@@ -32,7 +33,7 @@ Kategori mempunyai banyak tim/grup/match; match mempunyai dua peserta, banyak pe
 ## Constraint dan Invariant
 
 - Tim A ≠ Tim B; kedua tim dan grup berada dalam kategori match. Validasi relasi silang melalui domain dalam transaksi; foreign key selalu aktif.
-- Satu match aktif per arena; seleksi memakai compare-and-swap `arenaVersion` dalam transaksi. Satu timer RUNNING maksimal per match dan satu attempt ACTIVE. Saat fase berganti, timer lama dibekukan/ditutup dan timer fase baru disiapkan secara atomik.
+- Satu match aktif per arena; seleksi memakai compare-and-swap `arenaVersion` pada arena target dalam transaksi. Satu match tidak dapat aktif bersamaan di dua arena (mutual exclusion). Setiap arena memiliki state, timer, dan versi mandiri. Satu timer RUNNING maksimal per match dan satu attempt ACTIVE. Saat fase berganti, timer lama dibekukan/ditutup dan timer fase baru disiapkan secara atomik.
 - `remainingAtAnchorMs ≥ 0`; durasi integer milidetik, finite. Batas input teknis usulan 1 ms–24 jam, bukan aturan lomba; UI menerima detik utuh kecuali alat uji.
 - Gol tidak boleh negatif. Correcting event mengacu event asli dan tidak boleh dibatalkan dua kali. Gol pada attempt REPLACED tidak ikut skor sementara; ulangan babak Soccer memerlukan konfirmasi dampak gol attempt itu sebelum commit.
 - `winnerTeamId` hanya Tim A/B atau null berdasarkan keputusan juri, bukan inferensi otomatis. Gol final hanya untuk Soccer dan nonnegatif; perbedaan dari gol sementara memerlukan alasan, dasar juri, dan review eksplisit. Bentuk hasil khusus menunggu D-09.

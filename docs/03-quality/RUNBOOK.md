@@ -14,7 +14,7 @@ Operator menjalankan kontrol; juri/wasit memutuskan pertandingan; panitia arena 
 |---|---|
 | Versi aplikasi / schema / tanggal | `v1.0.0-rc1` (Git commit `d507d06`) · Schema SQLite `20261021120000_add_goal_intent` · 21 Oktober 2026 |
 | Launcher produksi & cara membuka | `pnpm start` atau `node scripts/start-production.mjs` (tanpa Vite, mandiri offline 100%, proteksi instance ganda) |
-| Alamat antarmuka & port | Dashboard Operator & Admin: `http://127.0.0.1:3000/`<br>OBS Browser Source: `http://127.0.0.1:3000/overlay` (transparan 100vw/100vh)<br>REST Snapshot Publik: `http://127.0.0.1:3000/api/v1/broadcast/main`<br>Telemetri OBS: `http://127.0.0.1:3000/api/v1/broadcast/telemetry` |
+| Alamat antarmuka & port | Dashboard Operator & Admin: `http://<IP_SERVER>:3000/` (atau `http://127.0.0.1:3000/` lokal server)<br>OBS Browser Source per Arena: `http://<IP_SERVER>:3000/overlay?arena=<kode_arena>` (transparan 100vw/100vh)<br>REST Snapshot Publik: `http://<IP_SERVER>:3000/api/v1/broadcast/snapshot?arena=<kode_arena>`<br>Telemetri OBS per Arena: `http://<IP_SERVER>:3000/api/v1/broadcast/telemetry` |
 | Lokasi data & media cadangan | DB Utama: `apps/server/prisma/dev.db` (WAL mode, synchronous NORMAL)<br>Arsip Backup: `/tmp/antigravity/backups/` (diverifikasi SHA-256 & PRAGMA integrity_check) |
 | Akun & kontak penanggung jawab | Super-Admin: `admin@mrc-x.internal` (bootstrap terisolasi)<br>Operator: `operator@mrc-x.internal` (kredensial diberikan tertutup)<br>Kontak: Koordinator Lapangan, Tim IT/Teknis, Dewan Juri, Operator OBS |
 | Bukti kesiapan & status gate | Seluruh 105 test cases PASS (F-01–F-06, T-01–T-04, E-01–E-08, L-01–L-12, O-01–O-05, O-06/O-07 simulasi).<br>**Gate rilis lapangan:** Persetujuan operasional D-11, D-14, D-15 tetap berstatus `NEEDS CONFIRMATION` menunggu pengesahan dewan juri/panitia. |
@@ -23,12 +23,19 @@ Setelah rilis siap: sambungkan daya stabil/UPS bila tersedia, pastikan ruang pen
 
 ## 2. Pemeriksaan Sebelum Sesi
 
-1. Super-admin mencocokkan kategori, grup, pasangan, jadwal dan durasi dengan keputusan koordinator/juri. Pendaftaran tim atau impor CSV dilakukan melalui antarmuka admin dengan verifikasi pratinjau all-or-nothing (pastikan 0 baris error sebelum commit). Jika durasi belum disahkan, hentikan persiapan fungsi itu dan tanyakan penanggung jawab.
-2. Buka dashboard; pastikan identitas acara, status koneksi server dan penyimpanan baik. Jika ada pemulihan timer, selesaikan pemeriksaan pada bagian 9 sebelum lanjut.
-3. Petugas OBS memasang alamat Browser Source sesuai kartu rilis, ukuran/transparansi sesuai hasil gladi. Periksa label “OBS menerima data”; preview saja belum cukup.
-4. Tampilkan match simulasi, cocokkan kedua tim, gol, waktu dan segmen pada output OBS sebenarnya; lepaskan simulasi sebelum data resmi dipakai.
+1. **Konfigurasi Jaringan LAN & Server Pusat:**
+   - Laptop Server Pusat dihubungkan ke switch/router LAN acara dengan IP statis (misal `192.168.1.100`).
+   - IT memastikan firewall mengizinkan port `3000` untuk traffic LAN lokal tertutup.
+   - Jalankan launcher produksi mandiri: `pnpm start`.
+2. **Setup Laptop Meja Arena (Operator & OBS):**
+   - Laptop meja arena terhubung ke router LAN yang sama.
+   - Buka browser operator: `http://<IP_SERVER>:3000/`.
+   - Di bagian header atas dashboard, operator memilih **Arena Tugas** yang dijaga.
+   - Petugas OBS memasang Browser Source dengan alamat dinamis: `http://<IP_SERVER>:3000/overlay?arena=<kode_arena>` (resolusi 1920x1080, latar belakang transparan). Periksa label telemetri OBS di dashboard arena tersebut menjadi hijau/SYNCHRONIZED.
+3. Super-admin mencocokkan master kategori, arena aktif, grup, tim, jadwal dan durasi dengan keputusan koordinator/juri. Pendaftaran tim atau impor CSV dilakukan melalui antarmuka admin dengan verifikasi pratinjau all-or-nothing (pastikan 0 baris error sebelum commit).
+4. Tampilkan match simulasi di arena tersebut, cocokkan kedua tim, gol, waktu dan segmen pada output OBS sebenarnya; lepaskan simulasi sebelum data resmi dipakai.
 5. Super-admin memeriksa backup terakhir, checksum/status valid dan salinan di media berbeda. Siapkan lembar manual, alat tulis dan pencatat waktu cadangan.
-6. Koordinator menyatakan siap; operator mulai menggunakan jadwal resmi. Jika startup gagal, jangan berpindah ke Vite dev sebagai solusi hari-H.
+6. Koordinator menyatakan siap; operator arena mulai mengendalikan jadwal resmi di arenanya masing-masing.
 
 ## 3. Pilih Match, Panggil, dan Verifikasi
 

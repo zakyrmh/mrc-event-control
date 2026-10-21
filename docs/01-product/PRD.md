@@ -10,9 +10,9 @@ Sumber historis: [SDD asli](../SDD_MRC_X_2026_Sistem_Kontrol_Pertandingan.md), k
 
 ## Pengguna, Sasaran, dan Batasan
 
-Super-admin mengelola kategori, tim, grup, jadwal, akun operator, durasi, audit, backup/restore, serta koreksi hasil resmi. Operator memilih match, mengendalikan fase/segmen/timer/gol, menyiarkan, dan memfinalisasi berdasarkan juri. Panitia arena memanggil dan memverifikasi peserta; juri menetapkan keputusan tanpa wajib mengoperasikan aplikasi.
+Super-admin mengelola kategori, arena pertandingan dinamis, tim, grup, jadwal, akun operator, durasi, audit, backup/restore, serta koreksi hasil resmi. Operator memilih arena tugas, memilih match di arenanya, mengendalikan fase/segmen/timer/gol, menyiarkan, dan memfinalisasi berdasarkan juri. Panitia arena memanggil dan memverifikasi peserta; juri menetapkan keputusan tanpa wajib mengoperasikan aplikasi.
 
-Keberhasilan berarti panitia menyelesaikan alur normal dan keadaan khusus dengan identitas benar, hasil terlindungi, dan pemulihan yang dapat dijelaskan. Tidak termasuk pendaftaran daring, pembayaran, sinkronisasi publik, integrasi scene OBS, algoritme juara/klasemen/kelolosan otomatis, atau penilaian robot otomatis. Ekspor rekap bersifat disarankan (SDD K-16); bracket otomatis dan kontrol scene tetap pengembangan lanjutan (K-17/K-18).
+Keberhasilan berarti panitia menyelesaikan alur normal dan keadaan khusus dengan identitas benar, hasil terlindungi, multi-arena berjalan konkuren tanpa saling mengganggu, dan pemulihan yang dapat dijelaskan. Tidak termasuk pendaftaran daring, pembayaran, sinkronisasi publik, integrasi scene OBS, algoritme juara/klasemen/kelolosan otomatis, atau penilaian robot otomatis. Ekspor rekap bersifat disarankan (SDD K-16); bracket otomatis dan kontrol scene tetap pengembangan lanjutan (K-17/K-18).
 
 ## Register Kebutuhan dan Ketertelusuran
 
@@ -38,6 +38,7 @@ ID berikut stabil; AC adalah skenario dalam [acceptance](../03-quality/ACCEPTANC
 | R-16 | Produksi satu server lokal tanpa Vite dev; arahan pengguna | ARCHITECTURE; 004 | AC-20 |
 | R-17 | Default timer per kategori/fase dapat diatur; §6 | TIMER_SPEC; 003 | AC-05 |
 | R-18 | Pemilihan/gol aman dan satu start sadar pada aba-aba setelah review; §9/10 | UI_UX_GUIDELINES; 002 | AC-02/08/21/28/30 |
+| R-19 | Manajemen arena dinamis, isolasi konkurensi match per arena, siaran OBS room terpisah; ADR-0004 | ARCHITECTURE / DATA_MODEL; 001/004 | AC-38 |
 | Q-01 | OBS: p95 commit-ke-render ≤500 ms, 100 perubahan di komputer acara; §12 | ARCHITECTURE; 004 | AC-11 |
 | Q-02 | Lima panitia lintas bidang; ≥4/5 menyelesaikan SOP tanpa bantuan setelah latihan 15 menit | UI_UX_GUIDELINES | AC-21 |
 | Q-03 | Gol sah: ≥4/5 pengguna input ≤2 detik, koreksi ≤10 detik tanpa mengubah tim lawan | UI_UX_GUIDELINES | AC-08/21 |

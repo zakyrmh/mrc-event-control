@@ -42,17 +42,17 @@ Modul tidak harus menjadi layanan/proses terpisah. Satu proses backend menyederh
 4. Reconnect selalu menarik snapshot penuh. Putus saat respons: query hasil operation key, lalu snapshot terbaru. Jangan mengirim ulang sebagai aksi baru ketika hasil lama belum diketahui.
 5. Tick timer untuk rendering bukan mutasi DB per frame; checkpoint internal terpisah dari versi perintah. Expiry yang terlambat diproses tetap menghasilkan 00:00, tanpa finalisasi otomatis.
 
-Baseline satu arena/channel (D-03/12 belum disahkan). Pemilihan match serta penggantian broadcast memakai `arenaVersion` agar dua tab tidak mengaktifkan dua match. Perubahan match memakai `matchVersion`. Command yang menyentuh keduanya membandingkan keduanya dalam transaksi yang sama. Snapshot gabungan memiliki `broadcastRevision` global untuk urutan publik. Setelah restore, `runtimeId` baru memaksa klien membuang cache/revision lama.
+Topologi Multi-Arena Dinamis (ADR-0004): Server Fastify terpusat melayani N arena fisik secara konkuren. Setiap arena dikelola secara dinamis dan memiliki `arenaId` serta `arenaVersion` masing-masing. Pemilihan match memakai compare-and-swap `matchVersion` dan `arenaVersion` target dalam satu transaksi untuk menjamin satu match hanya dapat aktif di maksimal satu arena. Namespace Socket.IO `/overlay` mengisolasi siaran melalui room `arena:<arenaCode>` dan rute `/overlay?arena=<arenaCode>`. Setiap arena memiliki registry timer independen sehingga countdown, jeda, atau perubahan durasi di satu arena tidak mempengaruhi arena lainnya. Snapshot publik memiliki urutan `broadcastRevision` tersegmen per arena. Setelah restore, `runtimeId` baru memaksa seluruh klien arena membuang cache/revision lama.
 
 ## Development dan Produksi
 
-Development dapat memakai Vite dan Fastify terpisah; port/proxy/CORS baru ditentukan saat runtime dibuat. Semua perintah aktual ada di [README](../../README.md).
+Development dapat memakai Vite dan Fastify terpisah; port/proxy/CORS dikonfigurasi otomatis melalui proxy dev. Semua perintah aktual ada di [README](../../README.md).
 
-Target produksi: satu server Node/Fastify melayani `apps/web/dist`, endpoint `/api`, `/socket.io`, serta `/overlay/main`. Route `/api`/socket tidak boleh jatuh ke fallback HTML SPA. Aset hasil build lokal, termasuk font, ikon, library, tidak bergantung CDN. Halaman dashboard `/operator`, `/admin` dan overlay adalah route **rencana**; belum tersedia.
+Target produksi: satu Laptop Server Pusat (Fastify) melayani `apps/web/dist`, endpoint `/api`, `/socket.io`, serta rute overlay dinamis `/overlay?arena=<kode_arena>`. Route `/api`/socket tidak boleh jatuh ke fallback HTML SPA. Aset hasil build lokal, termasuk font, ikon, library, tidak bergantung CDN.
 
-Bind awal `127.0.0.1`; port target `3000` adalah usulan yang harus dimasukkan manifest rilis. Jangan bind ke LAN tanpa review sesi, firewall, dan risiko baca siaran. Plugin static Fastify dan Socket.IO client belum dipasang. Supervisor/launcher lokal, Node runtime yang diuji, direktori data absolut di luar folder build, health check, serta shutdown terkontrol harus dikemas bersama rilis. Tidak ada script produksi sekarang; runbook tidak boleh menyuruh panitia menjalankan script khayalan.
+Server pusat di-bind ke host LAN (misal `0.0.0.0` atau IP lokal) pada port `3000`. Laptop meja masing-masing arena terhubung melalui switch/router LAN lokal mandiri tanpa internet. Operator mengakses `http://<IP_SERVER>:3000/` dan OBS Browser Source memuat `http://<IP_SERVER>:3000/overlay?arena=<kode_arena>`. Supervisor/launcher lokal, Node runtime yang diuji, direktori data absolut di luar folder build, health check, serta shutdown terkontrol dikemas bersama launcher produksi (`scripts/start-production.mjs`).
 
-Tradeoff: satu server memudahkan startup/offline dan satu origin, tetapi satu proses/komputer menjadi titik kegagalan bersama. Mitigasi: checkpoint, backup di media lain, launcher teruji, UPS bila tersedia, dan lembar manual. Web preview/Vite dev bukan layanan produksi.
+Tradeoff: satu server terpusat menyederhanakan agregasi data, master jadwal, dan pelaporan hasil, namun laptop server menjadi pusat koordinasi. Mitigasi: SQLite mode WAL dengan proteksi busy timeout, backup berkala di media cadangan terpisah, launcher teruji dengan proteksi instance ganda, UPS pada laptop server, dan lembar manual cadangan. Web preview/Vite dev bukan layanan produksi.
 
 ## OBS dan Isolasi Kegagalan
 
