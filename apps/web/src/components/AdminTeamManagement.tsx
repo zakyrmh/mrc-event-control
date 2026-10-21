@@ -315,6 +315,10 @@ export function AdminTeamManagement() {
   async function handleCreateTeam(e: React.FormEvent) {
     e.preventDefault()
     setErrorMessage(null)
+    if (!teamGroup) {
+      setErrorMessage('Grup wajib dipilih.')
+      return
+    }
     try {
       const res = await fetch('/api/v1/teams', {
         method: 'POST',
@@ -327,7 +331,7 @@ export function AdminTeamManagement() {
           code: teamCode.trim(),
           name: teamName.trim(),
           institution: teamInstitution.trim() || null,
-          groupId: teamGroup || null,
+          groupId: teamGroup,
         }),
       })
       if (!res.ok) {
@@ -561,7 +565,10 @@ export function AdminTeamManagement() {
               <select
                 id="team-cat"
                 value={teamCategory}
-                onChange={(e) => setTeamCategory(e.target.value)}
+                onChange={(e) => {
+                  setTeamCategory(e.target.value)
+                  setTeamGroup('')
+                }}
                 required
               >
                 <option value="">Pilih Kategori</option>
@@ -603,13 +610,14 @@ export function AdminTeamManagement() {
               />
             </div>
             <div className="form-field">
-              <label htmlFor="team-grp">Grup (Opsional)</label>
+              <label htmlFor="team-grp">Grup</label>
               <select
                 id="team-grp"
                 value={teamGroup}
                 onChange={(e) => setTeamGroup(e.target.value)}
+                required
               >
-                <option value="">Tanpa Grup</option>
+                <option value="">Pilih Grup</option>
                 {groups
                   .filter((g) => g.categoryId === teamCategory)
                   .map((g) => (
@@ -657,6 +665,7 @@ export function AdminTeamManagement() {
                   <th>Kode</th>
                   <th>Nama Tim</th>
                   <th>Institusi</th>
+                  <th>Grup</th>
                   <th>Status</th>
                   <th>Aksi</th>
                 </tr>
@@ -667,6 +676,7 @@ export function AdminTeamManagement() {
                     <td><code>{team.code}</code></td>
                     <td><strong>{team.name}</strong></td>
                     <td>{team.institution ?? '—'}</td>
+                    <td>{groups.find((g) => g.id === team.groupId)?.name ?? '—'}</td>
                     <td>
                       <span className={`status-badge ${team.archivedAt ? 'archived' : 'active'}`}>
                         {team.archivedAt ? 'Diarsipkan' : 'Aktif'}
