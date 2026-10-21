@@ -10,9 +10,16 @@ async function main(): Promise<void> {
   }
   const connection = new DatabaseConnection(databaseUrl)
   await connection.connect()
+  const allowReset = process.env.MRC_BOOTSTRAP_ADMIN_RESET === 'true'
   try {
-    const result = await bootstrapAdmin(connection.client, username, password)
-    process.stdout.write(result.created ? 'Super-admin created.\n' : 'Super-admin already exists; no changes made.\n')
+    const result = await bootstrapAdmin(connection.client, username, password, allowReset)
+    if (result.created) {
+      process.stdout.write('Super-admin created.\n')
+    } else if (result.updated) {
+      process.stdout.write('Super-admin password reset.\n')
+    } else {
+      process.stdout.write('Super-admin already exists; no changes made. (Set MRC_BOOTSTRAP_ADMIN_RESET=true to reset password)\n')
+    }
   } finally {
     await connection.disconnect()
   }

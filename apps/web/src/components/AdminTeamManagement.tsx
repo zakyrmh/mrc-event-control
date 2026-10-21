@@ -59,6 +59,22 @@ interface ImportPreviewResult {
   errors: Array<{ row: number; column?: string; message: string }>
 }
 
+interface UserSession {
+  username: string
+  role: string
+}
+
+async function parseResponseError(res: Response, fallback: string): Promise<string> {
+  try {
+    const text = await res.text()
+    if (!text) return `${fallback} (Status HTTP ${res.status})`
+    const data = JSON.parse(text)
+    return data?.error?.message ?? data?.message ?? `${fallback} (Status HTTP ${res.status})`
+  } catch {
+    return `${fallback} (Status HTTP ${res.status})`
+  }
+}
+
 export function AdminTeamManagement() {
   const [activeTab, setActiveTab] = useState<'categories' | 'teams' | 'import' | 'matches'>('teams')
   const [categories, setCategories] = useState<Category[]>([])
@@ -68,6 +84,14 @@ export function AdminTeamManagement() {
 
   const [loading, setLoading] = useState<boolean>(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
+  // Auth & Session States
+  const [session, setSession] = useState<UserSession | null>(null)
+  const [csrfToken, setCsrfToken] = useState<string>('')
+  const [loginUsername, setLoginUsername] = useState('superadmin')
+  const [loginPassword, setLoginPassword] = useState('')
+  const [loginError, setLoginError] = useState<string | null>(null)
+  const [loginSubmitting, setLoginSubmitting] = useState(false)
 
   // Filters & Form States
   const [selectedCategory, setSelectedCategory] = useState<string>('')
@@ -109,6 +133,11 @@ export function AdminTeamManagement() {
         fetch('/api/v1/matches'),
       ])
 
+      if (catsRes.status === 401 || catsRes.status === 403) {
+        setErrorMessage('Sesi belum aktif. Silakan login sebagai Super-Admin atau Operator di bawah.')
+        return
+      }
+
       if (!catsRes.ok || !grpsRes.ok || !teamsRes.ok || !matchesRes.ok) {
         throw new Error('Gagal memuat data dari server.')
       }
@@ -130,6 +159,7 @@ export function AdminTeamManagement() {
         setTeamCategory(catsData[0].id)
         setMatchCategory(catsData[0].id)
       }
+      setErrorMessage(null)
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Kesalahan jaringan')
     } finally {
@@ -137,52 +167,100 @@ export function AdminTeamManagement() {
     }
   }, [includeArchived, selectedCategory])
 
+  const checkSession = useCallback(async () => {
+    try {
+      const res = await fetch('/api/v1/auth/me')
+      if (res.ok) {
+        const data = await res.json()
+        setSession({ username: data.userId ?? 'superadmin', role: data.role })
+        if (data.csrfToken) setCsrfToken(data.csrfToken)
+        return true
+      }
+    } catch {}
+    try {
+      const bRes = await fetch('/api/v1/auth/bootstrap')
+      if (bRes.ok) {
+        const bData = await bRes.json()
+        if (bData.csrfToken) setCsrfToken(bData.csrfToken)
+      }
+    } catch {}
+    setSession(null)
+    return false
+  }, [])
+
   useEffect(() => {
     let ignore = false
     async function init() {
-      try {
-        const [catsRes, grpsRes, teamsRes, matchesRes] = await Promise.all([
-          fetch('/api/v1/categories'),
-          fetch('/api/v1/groups'),
-          fetch(`/api/v1/teams?includeArchived=${includeArchived}`),
-          fetch('/api/v1/matches'),
-        ])
-        if (!catsRes.ok || !grpsRes.ok || !teamsRes.ok || !matchesRes.ok) {
-          throw new Error('Gagal memuat data dari server.')
-        }
-        const [catsData, grpsData, teamsData, matchesData] = await Promise.all([
-          catsRes.json(),
-          grpsRes.json(),
-          teamsRes.json(),
-          matchesRes.json(),
-        ])
-        if (!ignore) {
-          setCategories(catsData)
-          setGroups(grpsData)
-          setTeams(teamsData)
-          setMatches(matchesData)
-          if (catsData.length > 0 && !selectedCategory) {
-            setSelectedCategory(catsData[0].id)
-            setGroupCategory(catsData[0].id)
-            setTeamCategory(catsData[0].id)
-            setMatchCategory(catsData[0].id)
-          }
-        }
-      } catch (err: unknown) {
-        if (!ignore) {
-          setErrorMessage(err instanceof Error ? err.message : 'Kesalahan jaringan')
-        }
-      } finally {
-        if (!ignore) {
-          setLoading(false)
-        }
+      await checkSession()
+      if (!ignore) {
+        await loadData()
       }
     }
     void init()
     return () => {
       ignore = true
     }
-  }, [includeArchived, selectedCategory])
+  }, [checkSession, loadData])
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault()
+    setLoginError(null)
+    setLoginSubmitting(true)
+    try {
+      let token = csrfToken
+      if (!token) {
+        const bRes = await fetch('/api/v1/auth/bootstrap')
+        if (bRes.ok) {
+          const bData = await bRes.json()
+          token = bData.csrfToken
+          setCsrfToken(token)
+        }
+      }
+      const res = await fetch('/api/v1/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': token,
+        },
+        body: JSON.stringify({
+          username: loginUsername.trim(),
+          password: loginPassword,
+        }),
+      })
+      if (!res.ok) {
+        const errText = await parseResponseError(res, 'Login gagal')
+        throw new Error(errText)
+      }
+      const data = await res.json()
+      setSession({ username: loginUsername.trim(), role: data.role })
+      if (data.csrfToken) setCsrfToken(data.csrfToken)
+      setLoginPassword('')
+      setErrorMessage(null)
+      loadData()
+    } catch (err: unknown) {
+      setLoginError(err instanceof Error ? err.message : 'Login gagal')
+    } finally {
+      setLoginSubmitting(false)
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await fetch('/api/v1/auth/logout', {
+        method: 'POST',
+        headers: { 'x-csrf-token': csrfToken },
+      })
+    } catch {}
+    setSession(null)
+    try {
+      const bRes = await fetch('/api/v1/auth/bootstrap')
+      if (bRes.ok) {
+        const bData = await bRes.json()
+        if (bData.csrfToken) setCsrfToken(bData.csrfToken)
+      }
+    } catch {}
+    loadData()
+  }
 
   // Category Actions
   async function handleCreateCategory(e: React.FormEvent) {
@@ -191,12 +269,15 @@ export function AdminTeamManagement() {
     try {
       const res = await fetch('/api/v1/categories', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
         body: JSON.stringify({ code: catCode.trim(), label: catLabel.trim(), enabled: true }),
       })
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error?.message ?? 'Gagal membuat kategori')
+        const errMsg = await parseResponseError(res, 'Gagal membuat kategori')
+        throw new Error(errMsg)
       }
       setCatCode('')
       setCatLabel('')
@@ -213,12 +294,15 @@ export function AdminTeamManagement() {
     try {
       const res = await fetch('/api/v1/groups', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
         body: JSON.stringify({ categoryId: groupCategory, name: groupName.trim() }),
       })
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error?.message ?? 'Gagal membuat grup')
+        const errMsg = await parseResponseError(res, 'Gagal membuat grup')
+        throw new Error(errMsg)
       }
       setGroupName('')
       loadData()
@@ -234,7 +318,10 @@ export function AdminTeamManagement() {
     try {
       const res = await fetch('/api/v1/teams', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
         body: JSON.stringify({
           categoryId: teamCategory,
           code: teamCode.trim(),
@@ -244,8 +331,8 @@ export function AdminTeamManagement() {
         }),
       })
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error?.message ?? 'Gagal membuat tim')
+        const errMsg = await parseResponseError(res, 'Gagal membuat tim')
+        throw new Error(errMsg)
       }
       setTeamCode('')
       setTeamName('')
@@ -263,15 +350,18 @@ export function AdminTeamManagement() {
       const isArchived = team.archivedAt !== null
       const res = await fetch(`/api/v1/teams/${team.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
         body: JSON.stringify({
           expectedRevision: team.revision,
           archived: !isArchived,
         }),
       })
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error?.message ?? 'Gagal mengubah status arsip tim')
+        const errMsg = await parseResponseError(res, 'Gagal mengubah status arsip tim')
+        throw new Error(errMsg)
       }
       loadData()
     } catch (err: unknown) {
@@ -289,16 +379,20 @@ export function AdminTeamManagement() {
       const revision = categories.length > 0 ? categories[0].revision : 1
       const res = await fetch('/api/v1/team-imports/preview', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
         body: JSON.stringify({
           csvContent,
           expectedRevision: revision,
         }),
       })
-      const data = await res.json()
       if (!res.ok) {
-        throw new Error(data.error?.message ?? 'Gagal memproses pratinjau CSV')
+        const errMsg = await parseResponseError(res, 'Gagal memproses pratinjau CSV')
+        throw new Error(errMsg)
       }
+      const data = await res.json()
       setPreviewResult(data)
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Error')
@@ -311,15 +405,18 @@ export function AdminTeamManagement() {
     try {
       const res = await fetch(`/api/v1/team-imports/${previewResult.id}/commit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
         body: JSON.stringify({
           previewHash: previewResult.previewHash,
           expectedRevision: previewResult.catalogRevision,
         }),
       })
-      const data = await res.json()
       if (!res.ok) {
-        throw new Error(data.error?.message ?? 'Gagal menyimpan impor tim')
+        const errMsg = await parseResponseError(res, 'Gagal menyimpan impor tim')
+        throw new Error(errMsg)
       }
       setPreviewResult(null)
       setCsvContent('')
@@ -336,7 +433,10 @@ export function AdminTeamManagement() {
     try {
       const res = await fetch('/api/v1/matches', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
         body: JSON.stringify({
           categoryId: matchCategory,
           groupId: matchGroup || null,
@@ -347,8 +447,8 @@ export function AdminTeamManagement() {
         }),
       })
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error?.message ?? 'Gagal membuat jadwal match')
+        const errMsg = await parseResponseError(res, 'Gagal membuat jadwal match')
+        throw new Error(errMsg)
       }
       loadData()
     } catch (err: unknown) {
@@ -367,8 +467,49 @@ export function AdminTeamManagement() {
   return (
     <div className="admin-container">
       <header className="admin-header">
-        <h1>MRC X 2026 — Kontrol Data Tim & Pertandingan</h1>
-        <p>Manajemen Master Kategori, Penempatan Grup, Tim, Impor CSV, dan Penjadwalan Manual.</p>
+        <div className="admin-header-main">
+          <div>
+            <h1>MRC X 2026 — Kontrol Data Tim & Pertandingan</h1>
+            <p>Manajemen Master Kategori, Penempatan Grup, Tim, Impor CSV, dan Penjadwalan Manual.</p>
+          </div>
+          {session ? (
+            <div className="admin-auth-bar">
+              <span className="admin-user-badge">
+                👤 Masuk sebagai: <strong>{session.username}</strong> ({session.role})
+              </span>
+              <button type="button" className="btn-secondary btn-sm" onClick={handleLogout}>
+                Keluar (Logout)
+              </button>
+            </div>
+          ) : (
+            <div className="admin-auth-card">
+              <div className="admin-auth-header">
+                <strong>Autentikasi Super-Admin</strong>
+                <span>Masuk untuk mengelola master data.</span>
+              </div>
+              <form onSubmit={handleLogin} className="admin-login-form">
+                <input
+                  type="text"
+                  placeholder="Username"
+                  value={loginUsername}
+                  onChange={(e) => setLoginUsername(e.target.value)}
+                  required
+                />
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  required
+                />
+                <button type="submit" className="btn-primary btn-sm" disabled={loginSubmitting}>
+                  {loginSubmitting ? '...' : 'Masuk'}
+                </button>
+              </form>
+              {loginError && <div className="admin-auth-error">{loginError}</div>}
+            </div>
+          )}
+        </div>
       </header>
 
       <nav className="admin-tabs">

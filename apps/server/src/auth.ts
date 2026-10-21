@@ -106,12 +106,34 @@ export async function bootstrapAdmin(
   client: PrismaClient,
   username: string,
   password: string,
-): Promise<{ created: boolean; userId: string }> {
+  allowReset = false,
+): Promise<{ created: boolean; updated?: boolean; userId: string }> {
   if (username.trim() === '') {
     throw new Error('Bootstrap username is required')
   }
   const existingAdmin = await client.user.findFirst({ where: { role: 'SUPER_ADMIN' } })
   if (existingAdmin !== null) {
+    if (allowReset) {
+      await client.$transaction(async (transaction) => {
+        await transaction.user.update({
+          where: { id: existingAdmin.id },
+          data: {
+            username: username.trim(),
+            passwordHash: await hashPassword(password),
+          },
+        })
+        await transaction.auditEntry.create({
+          data: {
+            action: 'user.bootstrap_reset',
+            afterJson: JSON.stringify({ role: 'SUPER_ADMIN', username: username.trim() }),
+            id: randomUUID(),
+            resourceId: existingAdmin.id,
+            resourceType: 'User',
+          },
+        })
+      })
+      return { created: false, updated: true, userId: existingAdmin.id }
+    }
     return { created: false, userId: existingAdmin.id }
   }
   const userId = randomUUID()

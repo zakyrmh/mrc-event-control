@@ -47,9 +47,15 @@ export async function startServer(
   const configuredOrigins = process.env.ALLOWED_ORIGINS?.split(',')
     .map((value) => value.trim())
     .filter((value) => value !== '')
-  const allowedOrigins = configuredOrigins?.length
-    ? configuredOrigins
-    : [`http://${host}:${port}`]
+  const allowedOrigins = [
+    ...new Set([
+      `http://${host}:${port}`,
+      `http://localhost:${port}`,
+      ...(configuredOrigins ?? []),
+      'http://127.0.0.1:5173',
+      'http://localhost:5173',
+    ]),
+  ]
   const controlSockets = new InMemoryControlSocketRegistry()
   const defaultStaticRoot = fileURLToPath(new URL('../../web/dist', import.meta.url))
   const staticRoot =
