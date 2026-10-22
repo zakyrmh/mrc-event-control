@@ -721,6 +721,19 @@ export function registerTeamRoutes(
     },
   )
 
+  // --- CATALOG REVISION ---
+  // The UI needs the exact revision the import endpoints enforce. Reading it
+  // from Category.revision was wrong: that counter is per category and never
+  // tracks EventConfig.catalogRevision, which made imports unreachable.
+  server.get(
+    '/api/v1/catalog-revision',
+    { config: { auth: { roles: ['OPERATOR', 'SUPER_ADMIN'] } } },
+    async (_request, reply) => {
+      const config = await getOrCreateEventConfig(client)
+      return reply.send({ catalogRevision: config.catalogRevision })
+    },
+  )
+
   // --- TEAM IMPORTS (PREVIEW & COMMIT) ---
   server.post(
     '/api/v1/team-imports/preview',
@@ -746,6 +759,9 @@ export function registerTeamRoutes(
           'VERSION_CONFLICT',
           'Revisi katalog telah berubah.',
           request.id,
+          // Tell the caller which revision is current so the UI can recover
+          // instead of resending a value it guessed.
+          { currentCatalogRevision: config.catalogRevision },
         )
       }
 
@@ -794,9 +810,19 @@ export function registerTeamRoutes(
       }
 
       const categories = await client.category.findMany()
-      const categoryMap = new Map(categories.map((c) => [c.code, c]))
+      // Panitia rarely matches letter case exactly. Normalise both sides so
+      // "LF-OPEN" and "lf-open" resolve to the same category, and "Grup A" and
+      // "group a" resolve to the same group.
+      const categoryMap = new Map(
+        categories.map((c) => [c.code.trim().toLowerCase(), c]),
+      )
       const groups = await client.competitionGroup.findMany()
-      const groupMap = new Map(groups.map((g) => [`${g.categoryId}:${g.name}`, g]))
+      const groupMap = new Map(
+        groups.map((g) => [
+          `${g.categoryId}:${g.name.trim().toLowerCase()}`,
+          g,
+        ]),
+      )
       const existingTeams = await client.team.findMany({
         select: { categoryId: true, code: true },
       })
@@ -825,7 +851,7 @@ export function registerTeamRoutes(
           })
           continue
         }
-        const category = categoryMap.get(categoryCode)
+        const category = categoryMap.get(categoryCode.toLowerCase())
         if (!category || !category.enabled) {
           errors.push({
             row: rowNum,
@@ -865,7 +891,9 @@ export function registerTeamRoutes(
 
         let groupId: string | null = null
         if (groupName) {
-          const group = groupMap.get(`${category.id}:${groupName}`)
+          const group = groupMap.get(
+            `${category.id}:${groupName.toLowerCase()}`,
+          )
           if (!group || !group.enabled) {
             errors.push({
               row: rowNum,
@@ -913,6 +941,11 @@ export function registerTeamRoutes(
         valid: errors.length === 0,
         previewHash,
         catalogRevision: config.catalogRevision,
+        // Categories the rows target, so the UI can reveal the imported teams.
+        // A batch may span several categories; reporting only the first would
+        // hide the rest, which is the same class of bug this fix addresses.
+        categoryIds: [...new Set(validatedRows.map((r) => r.categoryId))],
+        categoryId: validatedRows[0]?.categoryId ?? null,
         summary: {
           totalRows: lines.length - 1,
           validRows: validatedRows.length,
@@ -945,7 +978,7 @@ export function registerTeamRoutes(
           reply,
           404,
           'NOT_FOUND',
-          'Pratinjau impor tidak ditemukan atau sudah kedaluwarsa.',
+          'Pratinjau tidak ditemukan. Pratinjau disimpan di memori server, sehingga hilang bila server dimulai ulang atau lewat 15 menit. Ulangi Pratinjau Impor.',
           request.id,
         )
       }
@@ -970,8 +1003,9 @@ export function registerTeamRoutes(
           reply,
           409,
           'VERSION_CONFLICT',
-          'Pratinjau kedaluwarsa: katalog telah diperbarui sejak pratinjau dibuat.',
+          'Pratinjau kedaluwarsa: katalog telah diperbarui sejak pratinjau dibuat. Ulangi Pratinjau Impor.',
           request.id,
+          { currentCatalogRevision: config.catalogRevision },
         )
       }
 

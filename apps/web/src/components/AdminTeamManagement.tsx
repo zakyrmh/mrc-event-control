@@ -56,6 +56,8 @@ interface ImportPreviewResult {
   valid: boolean
   previewHash: string
   catalogRevision: number
+  categoryIds: string[]
+  categoryId: string | null
   summary: {
     totalRows: number
     validRows: number
@@ -69,15 +71,34 @@ interface UserSession {
   role: string
 }
 
-async function parseResponseError(res: Response, fallback: string): Promise<string> {
+interface ParsedApiError {
+  message: string
+  /** Present on 409 VERSION_CONFLICT so the caller can retry with the right value. */
+  currentCatalogRevision: number | null
+}
+
+async function parseApiError(
+  res: Response,
+  fallback: string,
+): Promise<ParsedApiError> {
+  const fallbackMessage = `${fallback} (Status HTTP ${res.status})`
   try {
     const text = await res.text()
-    if (!text) return `${fallback} (Status HTTP ${res.status})`
+    if (!text) return { message: fallbackMessage, currentCatalogRevision: null }
     const data = JSON.parse(text)
-    return data?.error?.message ?? data?.message ?? `${fallback} (Status HTTP ${res.status})`
+    const revision = Number(data?.error?.currentCatalogRevision)
+    return {
+      message:
+        data?.error?.message ?? data?.message ?? fallbackMessage,
+      currentCatalogRevision: Number.isFinite(revision) ? revision : null,
+    }
   } catch {
-    return `${fallback} (Status HTTP ${res.status})`
+    return { message: fallbackMessage, currentCatalogRevision: null }
   }
+}
+
+async function parseResponseError(res: Response, fallback: string): Promise<string> {
+  return (await parseApiError(res, fallback)).message
 }
 
 export function AdminTeamManagement() {
@@ -120,6 +141,10 @@ export function AdminTeamManagement() {
   // CSV Import Form
   const [csvContent, setCsvContent] = useState('')
   const [previewResult, setPreviewResult] = useState<ImportPreviewResult | null>(null)
+  const [catalogRevision, setCatalogRevision] = useState<number | null>(null)
+  const [importBusy, setImportBusy] = useState(false)
+  const [importNotice, setImportNotice] = useState<string | null>(null)
+  const [importedCategoryId, setImportedCategoryId] = useState<string | null>(null)
 
   // Match Schedule Form
   const [matchCategory, setMatchCategory] = useState('')
@@ -380,38 +405,103 @@ export function AdminTeamManagement() {
   }
 
   // CSV Import Actions
+  // The catalog revision must come from the server, never from Category.revision.
+  // Category.revision is a per-category counter (always 1 here) while the import
+  // endpoint enforces EventConfig.catalogRevision, so guessing made imports
+  // permanently unreachable.
+  const fetchCatalogRevision = useCallback(async (): Promise<number> => {
+    const res = await fetch('/api/v1/catalog-revision')
+    if (!res.ok) {
+      throw new Error(await parseResponseError(res, 'Gagal membaca revisi katalog'))
+    }
+    const data = await res.json()
+    const revision = Number(data?.catalogRevision)
+    if (!Number.isFinite(revision)) {
+      throw new Error('Server tidak mengembalikan revisi katalog yang sah.')
+    }
+    return revision
+  }, [])
+
+  const refreshCatalogRevision = useCallback(async () => {
+    try {
+      setCatalogRevision(await fetchCatalogRevision())
+    } catch (err: unknown) {
+      setCatalogRevision(null)
+      setErrorMessage(err instanceof Error ? err.message : 'Gagal membaca revisi katalog')
+    }
+  }, [fetchCatalogRevision])
+
+  // Reading the catalog revision is external-system synchronisation, so an
+  // effect is correct here; state is written only after the fetch resolves.
+  useEffect(() => {
+    if (!session) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const revision = await fetchCatalogRevision()
+        if (!cancelled) setCatalogRevision(revision)
+      } catch (err: unknown) {
+        if (cancelled) return
+        setCatalogRevision(null)
+        setErrorMessage(
+          err instanceof Error ? err.message : 'Gagal membaca revisi katalog',
+        )
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [session, fetchCatalogRevision])
+
   async function handlePreviewImport(e: React.FormEvent) {
     e.preventDefault()
     setErrorMessage(null)
     setPreviewResult(null)
+    setImportNotice(null)
+    setImportBusy(true)
     try {
-      // Find latest category revision or use 1
-      const revision = categories.length > 0 ? categories[0].revision : 1
+      // Always read a fresh revision before previewing; a cached value can be
+      // stale after any catalog change made in another tab.
+      const revision = await fetchCatalogRevision()
+      setCatalogRevision(revision)
+
       const res = await fetch('/api/v1/team-imports/preview', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-csrf-token': csrfToken,
         },
-        body: JSON.stringify({
-          csvContent,
-          expectedRevision: revision,
-        }),
+        body: JSON.stringify({ csvContent, expectedRevision: revision }),
       })
       if (!res.ok) {
-        const errMsg = await parseResponseError(res, 'Gagal memproses pratinjau CSV')
-        throw new Error(errMsg)
+        const parsed = await parseApiError(res, 'Gagal memproses pratinjau CSV')
+        // A 409 carries the revision that is current right now. Adopt it so the
+        // panel shows the real value and the next attempt uses it.
+        if (parsed.currentCatalogRevision !== null) {
+          setCatalogRevision(parsed.currentCatalogRevision)
+        }
+        throw new Error(parsed.message)
       }
       const data = await res.json()
       setPreviewResult(data)
+      if (data.valid) {
+        setImportNotice(
+          `${data.summary.validRows} baris siap disimpan. Belum ada data yang masuk sampai Anda menekan Konfirmasi.`,
+        )
+      }
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Error')
+      // Surface the new revision so the retry button can be shown.
+      void refreshCatalogRevision()
+    } finally {
+      setImportBusy(false)
     }
   }
 
   async function handleCommitImport() {
     if (!previewResult) return
     setErrorMessage(null)
+    setImportBusy(true)
     try {
       const res = await fetch(`/api/v1/team-imports/${previewResult.id}/commit`, {
         method: 'POST',
@@ -425,14 +515,47 @@ export function AdminTeamManagement() {
         }),
       })
       if (!res.ok) {
-        const errMsg = await parseResponseError(res, 'Gagal menyimpan impor tim')
-        throw new Error(errMsg)
+        const parsed = await parseApiError(res, 'Gagal menyimpan impor tim')
+        if (parsed.currentCatalogRevision !== null) {
+          setCatalogRevision(parsed.currentCatalogRevision)
+        }
+        // The preview is dead once the catalog moved on. Drop it so the panel
+        // stops offering a Konfirmasi button that can only fail.
+        if (res.status === 409) setPreviewResult(null)
+        throw new Error(parsed.message)
       }
+      const data = await res.json()
       setPreviewResult(null)
       setCsvContent('')
-      loadData()
+      const importedIds: string[] = Array.isArray(previewResult.categoryIds)
+        ? previewResult.categoryIds
+        : []
+      // Show the imported teams immediately: the previous default filter was the
+      // first category by code, which hid the newly imported category. When the
+      // batch spans several categories, filtering to one would hide the rest, so
+      // fall back to showing everything.
+      if (importedIds.length === 1 && importedIds[0]) {
+        setImportedCategoryId(importedIds[0])
+        setSelectedCategory(importedIds[0])
+      } else {
+        setImportedCategoryId(null)
+        setSelectedCategory('')
+      }
+      const importedLabels = importedIds
+        .map((id) => categories.find((c) => c.id === id)?.label ?? id)
+        .join(', ')
+      setImportNotice(
+        `${data.importedCount} tim berhasil disimpan${
+          importedLabels ? ` pada ${importedLabels}` : ''
+        }. Daftar tim sudah diperbarui.`,
+      )
+      setActiveTab('teams')
+      await loadData()
+      await refreshCatalogRevision()
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Error')
+    } finally {
+      setImportBusy(false)
     }
   }
 
@@ -560,6 +683,22 @@ export function AdminTeamManagement() {
         </div>
       )}
 
+      {/* Rendered outside the tabs: the import flow switches to the teams tab on
+          success, so a notice scoped to the import tab would disappear exactly
+          when the user needs to see that the import worked. */}
+      {importNotice && (
+        <div className="state-box success" role="status">
+          <span>{importNotice}</span>
+          <button
+            type="button"
+            className="btn-secondary btn-sm"
+            onClick={() => setImportNotice(null)}
+          >
+            Tutup
+          </button>
+        </div>
+      )}
+
       {loading && <div className="state-box loading">Memuat data terkini...</div>}
 
       {/* TAB: TEAMS */}
@@ -663,8 +802,35 @@ export function AdminTeamManagement() {
             </label>
           </div>
 
+          {importedCategoryId && (
+            <div className="state-box success" role="status">
+              Menampilkan hasil impor:{' '}
+              <strong>
+                {categories.find((c) => c.id === importedCategoryId)?.label ??
+                  importedCategoryId}
+              </strong>
+              .{' '}
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                onClick={() => {
+                  setImportedCategoryId(null)
+                  setSelectedCategory('')
+                }}
+              >
+                Tampilkan Semua Kategori
+              </button>
+            </div>
+          )}
+
           {filteredTeams.length === 0 ? (
-            <div className="state-box empty">Belum ada data tim yang terdaftar.</div>
+            <div className="state-box empty">
+              {selectedCategory
+                ? `Belum ada tim pada kategori "${
+                    categories.find((c) => c.id === selectedCategory)?.label ?? ''
+                  }". Pilih "Semua Kategori" untuk melihat seluruh tim.`
+                : 'Belum ada data tim yang terdaftar.'}
+            </div>
           ) : (
             <table className="data-table">
               <thead>
@@ -823,7 +989,39 @@ export function AdminTeamManagement() {
           <p style={{ fontSize: '0.875rem', color: '#64748b' }}>
             Format Header: <code>categoryCode,teamCode,teamName,institution,groupName</code>.
             Jika satu saja baris salah, seluruh berkas ditolak dan tidak ada data yang masuk sebagian.
+            Huruf besar/kecil tidak membedakan.
           </p>
+
+          <div className="import-reference">
+            <div>
+              <strong>Kode kategori yang tersedia</strong>
+              <ul>
+                {categories.length === 0 && <li>Belum ada kategori.</li>}
+                {categories.map((c) => (
+                  <li key={c.id}>
+                    <code>{c.code}</code> — {c.label}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <strong>Nama grup yang tersedia</strong>
+              <ul>
+                {groups.length === 0 && <li>Belum ada grup.</li>}
+                {categories.map((c) => {
+                  const names = groups
+                    .filter((g) => g.categoryId === c.id)
+                    .map((g) => g.name)
+                  if (names.length === 0) return null
+                  return (
+                    <li key={c.id}>
+                      <code>{c.code}</code>: {names.join(', ')}
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          </div>
 
           <form onSubmit={handlePreviewImport}>
             <div className="form-field">
@@ -833,12 +1031,25 @@ export function AdminTeamManagement() {
                 rows={6}
                 value={csvContent}
                 onChange={(e) => setCsvContent(e.target.value)}
-                placeholder={'categoryCode,teamCode,teamName,institution,groupName\nLF-OPEN,LF-01,Tim Garuda,PNP,Grup A'}
+                placeholder={
+                  'categoryCode,teamCode,teamName,institution,groupName\n' +
+                  'lf-junior,LFJ-01,Tim Garuda,PNP,Group A'
+                }
                 required
               />
             </div>
-            <div style={{ marginTop: '1rem' }}>
-              <button type="submit" className="btn-primary">Pratinjau Impor</button>
+            <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              <button type="submit" className="btn-primary" disabled={importBusy}>
+                {importBusy ? 'Memproses...' : 'Pratinjau Impor'}
+              </button>
+              <span style={{ fontSize: '0.8125rem', color: '#64748b' }}>
+                Revisi katalog:{' '}
+                {catalogRevision === null ? (
+                  <em>belum terbaca</em>
+                ) : (
+                  <code>{catalogRevision}</code>
+                )}
+              </span>
             </div>
           </form>
 
@@ -863,8 +1074,13 @@ export function AdminTeamManagement() {
 
               {previewResult.valid && (
                 <div style={{ marginTop: '1rem' }}>
-                  <button type="button" className="btn-primary" onClick={handleCommitImport}>
-                    Konfirmasi Simpan Seluruh Tim
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={handleCommitImport}
+                    disabled={importBusy}
+                  >
+                    {importBusy ? 'Menyimpan...' : 'Konfirmasi Simpan Seluruh Tim'}
                   </button>
                 </div>
               )}

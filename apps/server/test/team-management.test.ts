@@ -345,7 +345,237 @@ describe('Team & Match Management (T-01 - T-04)', () => {
     })
   })
 
+  describe('T-02a: Catalog revision read model (regression: import was unreachable)', () => {
+    it('exposes the same revision the import endpoint enforces', async () => {
+      const res = await server.inject({
+        method: 'GET',
+        url: '/api/v1/catalog-revision',
+        headers: {
+          cookie: adminSession.cookie,
+          origin,
+          'x-csrf-token': adminSession.csrfToken,
+        },
+      })
+      assert.equal(res.statusCode, 200)
+
+      const config = await connection.client.eventConfig.findFirstOrThrow()
+      assert.equal(
+        res.json().catalogRevision,
+        config.catalogRevision,
+        'the UI must be able to read the exact revision the server enforces',
+      )
+    })
+
+    it('is readable by operators too', async () => {
+      const res = await server.inject({
+        method: 'GET',
+        url: '/api/v1/catalog-revision',
+        headers: {
+          cookie: operatorSession.cookie,
+          origin,
+          'x-csrf-token': operatorSession.csrfToken,
+        },
+      })
+      assert.equal(res.statusCode, 200)
+      assert.equal(typeof res.json().catalogRevision, 'number')
+    })
+
+    it('rejects a category revision used as a catalog revision', async () => {
+      // This is the exact production bug: the UI sent Category.revision (always
+      // 1) while the server compares against EventConfig.catalogRevision.
+      const created = await server.inject({
+        method: 'POST',
+        url: '/api/v1/categories',
+        headers: {
+          cookie: adminSession.cookie,
+          origin,
+          'x-csrf-token': adminSession.csrfToken,
+        },
+        payload: { code: 'LF-REVPROBE', label: 'Revision Probe', enabled: true },
+      })
+      assert.equal(created.statusCode, 201)
+      const category = created.json()
+
+      const config = await connection.client.eventConfig.findFirstOrThrow()
+      assert.notEqual(
+        category.revision,
+        config.catalogRevision,
+        'precondition: the two revision scales must differ for this test to mean anything',
+      )
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/api/v1/team-imports/preview',
+        headers: {
+          cookie: adminSession.cookie,
+          origin,
+          'x-csrf-token': adminSession.csrfToken,
+        },
+        payload: {
+          csvContent:
+            'categoryCode,teamCode,teamName,institution,groupName\n' +
+            'LF-REVPROBE,LF-WRONGREV-1,Wrong Revision,,Group A',
+          expectedRevision: category.revision,
+        },
+      })
+      assert.equal(res.statusCode, 409)
+      assert.equal(res.json().error.code, 'VERSION_CONFLICT')
+      assert.equal(
+        res.json().error.currentCatalogRevision,
+        config.catalogRevision,
+        'a 409 must tell the caller which revision to use next',
+      )
+    })
+  })
+
   describe('T-02: All-or-Nothing CSV Import (TM-02)', () => {
+    it('reports every category a batch touches, not just the first', async () => {
+      const second = await server.inject({
+        method: 'POST',
+        url: '/api/v1/categories',
+        headers: {
+          cookie: adminSession.cookie,
+          origin,
+          'x-csrf-token': adminSession.csrfToken,
+        },
+        payload: { code: 'LF-MULTI', label: 'Multi Category', enabled: true },
+      })
+      assert.equal(second.statusCode, 201)
+      const secondCategory = second.json()
+
+      const config = await connection.client.eventConfig.findFirstOrThrow()
+      const csv = [
+        'categoryCode,teamCode,teamName,institution,groupName',
+        'LF-OPEN,LF-MULTI-1,Multi One,,Grup A',
+        'LF-MULTI,LF-MULTI-2,Multi Two,,',
+      ].join('\n')
+
+      const previewRes = await server.inject({
+        method: 'POST',
+        url: '/api/v1/team-imports/preview',
+        headers: {
+          cookie: adminSession.cookie,
+          origin,
+          'x-csrf-token': adminSession.csrfToken,
+        },
+        payload: { csvContent: csv, expectedRevision: config.catalogRevision },
+      })
+      assert.equal(previewRes.statusCode, 200)
+      const preview = previewRes.json()
+      assert.equal(preview.valid, true)
+
+      // The UI uses this list to reveal the imported teams. Returning only the
+      // first category would hide the teams imported into the others.
+      assert.equal(preview.categoryIds.length, 2)
+      assert.ok(preview.categoryIds.includes(secondCategory.id))
+    })
+
+    it('accepts categoryCode and groupName regardless of letter case', async () => {
+      const config = await connection.client.eventConfig.findFirstOrThrow()
+      const csv = [
+        'categoryCode,teamCode,teamName,institution,groupName',
+        '  LF-OPEN  ,LF-CASE-1,Case Insensitive,PNP,grup a',
+      ].join('\n')
+
+      const previewRes = await server.inject({
+        method: 'POST',
+        url: '/api/v1/team-imports/preview',
+        headers: {
+          cookie: adminSession.cookie,
+          origin,
+          'x-csrf-token': adminSession.csrfToken,
+        },
+        payload: { csvContent: csv, expectedRevision: config.catalogRevision },
+      })
+      assert.equal(previewRes.statusCode, 200)
+      const preview = previewRes.json()
+      assert.equal(
+        preview.valid,
+        true,
+        `expected the row to be accepted, errors: ${JSON.stringify(preview.errors)}`,
+      )
+
+      const commitRes = await server.inject({
+        method: 'POST',
+        url: `/api/v1/team-imports/${preview.id}/commit`,
+        headers: {
+          cookie: adminSession.cookie,
+          origin,
+          'x-csrf-token': adminSession.csrfToken,
+        },
+        payload: {
+          previewHash: preview.previewHash,
+          expectedRevision: preview.catalogRevision,
+        },
+      })
+      assert.equal(commitRes.statusCode, 200)
+
+      const stored = await connection.client.team.findFirstOrThrow({
+        where: { code: 'LF-CASE-1' },
+        include: { memberships: true },
+      })
+      assert.equal(stored.name, 'Case Insensitive')
+      assert.equal(
+        stored.memberships.length,
+        1,
+        'the lower-case group name must resolve to the real group',
+      )
+    })
+
+    it('makes imported teams visible through the teams list endpoint', async () => {
+      const config = await connection.client.eventConfig.findFirstOrThrow()
+      const csv = [
+        'categoryCode,teamCode,teamName,institution,groupName',
+        'LF-OPEN,LF-VISIBLE-1,Visible Team,PNP,Grup A',
+      ].join('\n')
+
+      const previewRes = await server.inject({
+        method: 'POST',
+        url: '/api/v1/team-imports/preview',
+        headers: {
+          cookie: adminSession.cookie,
+          origin,
+          'x-csrf-token': adminSession.csrfToken,
+        },
+        payload: { csvContent: csv, expectedRevision: config.catalogRevision },
+      })
+      const preview = previewRes.json()
+      assert.equal(preview.valid, true)
+
+      const commitRes = await server.inject({
+        method: 'POST',
+        url: `/api/v1/team-imports/${preview.id}/commit`,
+        headers: {
+          cookie: adminSession.cookie,
+          origin,
+          'x-csrf-token': adminSession.csrfToken,
+        },
+        payload: {
+          previewHash: preview.previewHash,
+          expectedRevision: preview.catalogRevision,
+        },
+      })
+      assert.equal(commitRes.statusCode, 200)
+      assert.equal(commitRes.json().importedCount, 1)
+
+      // The list endpoint is the interface the UI renders, so assert there.
+      const listRes = await server.inject({
+        method: 'GET',
+        url: '/api/v1/teams',
+        headers: {
+          cookie: adminSession.cookie,
+          origin,
+          'x-csrf-token': adminSession.csrfToken,
+        },
+      })
+      assert.equal(listRes.statusCode, 200)
+      const listed = listRes
+        .json()
+        .find((team: { code: string }) => team.code === 'LF-VISIBLE-1')
+      assert.ok(listed, 'imported team must appear in the teams list')
+      assert.ok(listed.groupId, 'imported team must keep its group membership')
+    })
+
     it('previews and commits valid CSV, creating teams atomically', async () => {
       const config = await connection.client.eventConfig.findFirstOrThrow()
       const csv = [
@@ -501,6 +731,12 @@ describe('Team & Match Management (T-01 - T-04)', () => {
       })
       assert.equal(commitRes.statusCode, 409)
       assert.equal(commitRes.json().error.code, 'VERSION_CONFLICT')
+      const after = await connection.client.eventConfig.findFirstOrThrow()
+      assert.equal(
+        commitRes.json().error.currentCatalogRevision,
+        after.catalogRevision,
+        'a stale commit must report the revision that is current now',
+      )
     })
   })
 

@@ -373,3 +373,127 @@ button:disabled {
   color: var(--color-stone);
   font-size: 14px;
 }
+
+/* --- Status boxes and import panel ---
+   These classes are used by the admin UI but had no styling, so success and
+   error states rendered as plain unstyled text. */
+
+.state-box {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 1rem 0;
+  background-color: var(--color-surface);
+}
+
+.state-box.empty {
+  color: var(--color-stone);
+  border-style: dashed;
+}
+
+.state-box.loading {
+  color: var(--color-graphite);
+}
+
+.state-box.error {
+  border-color: var(--color-danger);
+  background-color: #fdf2f2;
+  color: #7a1c1c;
+}
+
+.state-box.success {
+  border-color: var(--color-success);
+  background-color: #f1f9f2;
+  color: #14532d;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.preview-summary {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-top: 1rem;
+  background-color: var(--color-surface);
+}
+
+.preview-summary h3 {
+  margin: 0 0 0.5rem;
+  font-size: 15px;
+}
+
+.preview-summary p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-graphite);
+}
+
+.error-list {
+  margin-top: 0.75rem;
+  border-left: 3px solid var(--color-danger);
+  padding: 0.5rem 0.75rem;
+  background-color: #fdf2f2;
+  font-size: 13px;
+}
+
+.error-list ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.import-reference {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  font-size: 13px;
+}
+
+.import-reference strong {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.import-reference ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--color-graphite);
+}
+
+.import-reference code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background-color: var(--color-primary-tint);
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+}
+
+.btn-success {
+  background-color: var(--color-success);
+  color: #ffffff;
+  border: 1px solid var(--color-success);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-success:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-danger:disabled,
+.btn-success:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

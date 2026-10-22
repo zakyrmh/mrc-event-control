@@ -56,7 +56,8 @@ S=super-admin, O=operator (S juga boleh), P=publik terbatas. List memakai `curso
 | POST `/categories`; PATCH `/categories/{id}` | S | code/label/enabled; code unik |
 | POST `/groups`; PATCH `/groups/{id}` | S | categoryId/name; kategori tidak diganti jika dipakai |
 | POST `/teams`; PATCH `/teams/{id}` | S | categoryId/code/name/institution, groupId nullable; arsip via archived=true |
-| POST `/team-imports/preview` | S | teks CSV UTF-8 + expectedRevision katalog → jobId, errors per baris, diff, hash; belum mengubah tim |
+| GET `/catalog-revision` | O / S | `{ catalogRevision }` — satu-satunya nilai sah untuk `expectedRevision` impor. `Category.revision` adalah penghitung per kategori dan tidak pernah sama dengan nilai ini |
+| POST `/team-imports/preview` | S | teks CSV UTF-8 + expectedRevision katalog → jobId, errors per baris, diff, hash, `categoryId` kategori sasaran; belum mengubah tim. 409 menyertakan `currentCatalogRevision` |
 | POST `/team-imports/{id}/commit` | S | previewHash + expectedRevision; atomic all-or-nothing, tanpa overwrite implisit |
 | POST `/matches`; PATCH `/matches/{id}` | S | kategori/grup/tahap/Tim A/Tim B/jadwal; identitas hanya saat SCHEDULED belum bermain. `stage` (`GROUP`/`KNOCKOUT`/`FINAL`) opsional, bawaan `GROUP`. Nomor urut unik per kategori; bentrok menghasilkan 409 |
 | GET `/match-schedules/group-preview` | S | `categoryId`, `stage`, `rondeCount` wajib, `groupIds` opsional; menghitung round robin tanpa menulis; melaporkan `exists` per baris |
@@ -74,7 +75,7 @@ S=super-admin, O=operator (S juga boleh), P=publik terbatas. List memakai `curso
 | POST `/backups` | S | request snapshot konsisten →202 job; GET `/backups/{id}` status/manifest; GET `/backups/{id}/download` file setelah verified |
 | POST `/restore-checks` | S | file backup + checksum →202 validasi pada salinan; tidak mengganti database aktif |
 
-[PROPOSED] CSV: header `categoryCode,teamCode,teamName,institution,groupName`; kategori/grup harus sudah ada, kode unik per kategori; kosong/duplikat/rujukan asing menyebabkan error baris dan commit seluruh batch ditolak. Batas usulan 5 MiB/5.000 baris. Preview terikat hash isi dan revisi katalog, kedaluwarsa saat katalog berubah. Format dan batas menunggu D-15. Restore aktif sengaja melalui launcher maintenance lokal yang akan dibuat dan diuji; tidak ada endpoint restore yang menimpa DB sambil match berjalan.
+[PROPOSED] CSV: header `categoryCode,teamCode,teamName,institution,groupName`; kategori/grup harus sudah ada, kode unik per kategori; kosong/duplikat/rujukan asing menyebabkan error baris dan commit seluruh batch ditolak. `categoryCode` dan `groupName` dicocokkan tanpa membedakan huruf besar/kecil dan spasi tepi diabaikan. Batas usulan 5 MiB/5.000 baris. Preview terikat hash isi dan revisi katalog, kedaluwarsa saat katalog berubah. Format dan batas menunggu D-15. Restore aktif sengaja melalui launcher maintenance lokal yang akan dibuat dan diuji; tidak ada endpoint restore yang menimpa DB sambil match berjalan.
 
 Job backup/restore-check memakai status QUEUED/RUNNING/VERIFYING/COMPLETED/FAILED dan error terstruktur. Respons 202 hanya mengakui job tersimpan, bukan backup sudah valid. Receipt retry mengembalikan job yang sama; file baru boleh diunduh sebagai cadangan terverifikasi setelah COMPLETED. Kegagalan ruang/media tidak menghapus cadangan baik sebelumnya.
 
