@@ -31,6 +31,7 @@ model Category {
   teams     Team[]
   matches   Match[]
   timerConfigs TimerConfig[]
+  tieConfigs TieConfig[]
 }
 
 model CompetitionGroup {
@@ -201,6 +202,7 @@ model Match {
   id                String            @id
   categoryId        String
   groupId           String?
+  stage             String            @default("GROUP")
   stageLabel        String?
   scheduledAt       DateTime?
   sequence          Int
@@ -214,12 +216,17 @@ model Match {
   currentSegmentId  String?
   teamASnapshotJson String?
   teamBSnapshotJson String?
+  tieId             String?
+  rondeNumber       Int?
+  generationBatchId String?
+  bracketSlot       String?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   category          Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   group             CompetitionGroup? @relation(fields: [groupId, categoryId], references: [id, categoryId], onDelete: Restrict, onUpdate: Cascade)
   teamA             Team              @relation("MatchTeamA", fields: [teamAId, categoryId], references: [id, categoryId], onDelete: Restrict, onUpdate: Cascade)
   teamB             Team              @relation("MatchTeamB", fields: [teamBId, categoryId], references: [id, categoryId], onDelete: Restrict, onUpdate: Cascade)
+  generationBatch   MatchGenerationBatch? @relation(fields: [generationBatchId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   activeInArena     ArenaState?       @relation("ArenaActiveMatch")
   participants      MatchParticipant[]
   segments          SegmentAttempt[]
@@ -228,12 +235,47 @@ model Match {
   timerInstances    TimerInstance[]
   goalIntents       GoalIntent[]
 
+  @@unique([categoryId, sequence])
+  @@unique([tieId, rondeNumber])
   @@index([categoryId])
   @@index([groupId])
   @@index([teamAId])
   @@index([teamBId])
   @@index([status])
   @@index([sequence])
+  @@index([generationBatchId])
+}
+
+model TieConfig {
+  id          String   @id
+  categoryId  String
+  stage       String
+  rondeCount  Int
+  approvedBy  String?
+  sourceNote  String?
+  revision    Int      @default(1)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([categoryId, stage])
+  @@index([categoryId])
+}
+
+model MatchGenerationBatch {
+  id           String   @id
+  categoryId   String
+  stage        String
+  rondeCount   Int
+  stageLabel   String?
+  createdCount Int
+  actorId      String?
+  createdAt    DateTime @default(now())
+  rolledBackAt DateTime?
+  matches      Match[]
+
+  @@index([categoryId])
+  @@index([rolledBackAt])
 }
 
 model ArenaState {

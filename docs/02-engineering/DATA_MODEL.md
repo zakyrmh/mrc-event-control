@@ -13,7 +13,9 @@
 | Category | id, code unik, label resmi, enabled; empat kategori awal mengikuti PRD |
 | Group / GroupMembership | groupId, categoryId, name unik per kategori; membership teamId/groupId, unik kategori+team; pindah grup melalui aksi tercatat |
 | Team | id, categoryId, code unik per kategori, name, institution opsional, archivedAt; nama sama boleh bila kode berbeda |
-| Match | id, categoryId, groupId opsional, stageLabel, scheduledAt/sequence, teamAId, teamBId, status, phase, resumePhase, matchVersion, hasStarted, currentSegmentId |
+| Match | id, categoryId, groupId opsional, stage `GROUP`/`KNOCKOUT`/`FINAL`, stageLabel, scheduledAt, sequence unik per kategori, teamAId, teamBId, status, phase, resumePhase, matchVersion, hasStarted, currentSegmentId, tieId/rondeNumber opsional (unik berpasangan), generationBatchId, bracketSlot (disiapkan Fase 2) |
+| TieConfig | id, categoryId, stage, rondeCount > 0, approvedBy, sourceNote, revision; unik per kategori+tahap; menyimpan keputusan panitia, bukan nilai bawaan aplikasi |
+| MatchGenerationBatch | id, categoryId, stage, rondeCount, stageLabel, createdCount, actorId, createdAt, rolledBackAt; jejak satu tindakan generate agar dapat dibatalkan utuh |
 | MatchParticipant | matchId, side A/B, teamId, attendance UNKNOWN/PRESENT/ABSENT, verification PENDING/READY/NOT_READY/FAILED, note; satu record per sisi |
 | Arena | id, code unik (misal LF-1, SOCCER-1), name, categoryId opsional (filter kategori), enabled, revision; dikelola dinamis oleh Super-Admin |
 | ArenaState | id, arenaId unik (relasi 1:1 ke Arena), activeMatchId nullable, arenaVersion; satu match tidak aktif di dua arena; setiap arena memiliki state mandiri |

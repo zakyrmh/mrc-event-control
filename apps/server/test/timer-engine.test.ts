@@ -1,35 +1,15 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile } from 'node:fs/promises'
+import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { after, before, describe, it } from 'node:test'
-import Database from 'better-sqlite3'
 import { FakeClock } from '@mrc-x/shared'
 
 import { DatabaseConnection } from '../src/database.js'
+import { createMigratedDatabase } from './helpers/migrations.js'
 import { TimerService } from '../src/timer-service.js'
 
-const m1Url = new URL(
-  '../prisma/migrations/20261018190000_initial_foundation/migration.sql',
-  import.meta.url,
-)
-const m2Url = new URL(
-  '../prisma/migrations/20261020200000_add_match_schedule/migration.sql',
-  import.meta.url,
-)
-const m3Url = new URL(
-  '../prisma/migrations/20261021100000_add_match_lifecycle_foundation/migration.sql',
-  import.meta.url,
-)
-const m4Url = new URL(
-  '../prisma/migrations/20261021110000_add_timer_engine_foundation/migration.sql',
-  import.meta.url,
-)
-const m5Url = new URL(
-  '../prisma/migrations/20261021120000_add_goal_intent/migration.sql',
-  import.meta.url,
-)
 
 describe('Timer Engine Service & Recovery (003 E-01 s/d E-08 / TC-05, TC-06, TC-14, TC-23, TC-25)', () => {
   let connection: DatabaseConnection
@@ -43,19 +23,8 @@ describe('Timer Engine Service & Recovery (003 E-01 s/d E-08 / TC-05, TC-06, TC-
   before(async () => {
     const directory = await mkdtemp(join(tmpdir(), 'mrc-x-timer-'))
     const databasePath = join(directory, 'timer.db')
-    const m1 = await readFile(m1Url, 'utf8')
-    const m2 = await readFile(m2Url, 'utf8')
-    const m3 = await readFile(m3Url, 'utf8')
-    const m4 = await readFile(m4Url, 'utf8')
-    const m5 = await readFile(m5Url, 'utf8')
 
-    const db = new Database(databasePath)
-    db.exec(m1)
-    db.exec(m2)
-    db.exec(m3)
-    db.exec(m4)
-    db.exec(m5)
-    db.close()
+    await createMigratedDatabase(databasePath)
 
     connection = new DatabaseConnection(`file:${databasePath}`)
     await connection.connect()

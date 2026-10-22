@@ -1163,6 +1163,7 @@ export function registerTeamRoutes(
             id,
             categoryId: parsed.data.categoryId,
             groupId: parsed.data.groupId ?? null,
+            stage: parsed.data.stage ?? 'GROUP',
             stageLabel: parsed.data.stageLabel ?? null,
             scheduledAt: parsed.data.scheduledAt
               ? new Date(parsed.data.scheduledAt)

@@ -1,36 +1,16 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile } from 'node:fs/promises'
+import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { after, before, describe, it } from 'node:test'
 import type { FastifyInstance } from 'fastify'
-import Database from 'better-sqlite3'
 
 import { buildServer } from '../src/app.js'
 import { bootstrapAdmin, hashPassword } from '../src/auth.js'
 import { DatabaseConnection } from '../src/database.js'
+import { createMigratedDatabase } from './helpers/migrations.js'
 
-const migration1Url = new URL(
-  '../prisma/migrations/20261018190000_initial_foundation/migration.sql',
-  import.meta.url,
-)
-const migration2Url = new URL(
-  '../prisma/migrations/20261020200000_add_match_schedule/migration.sql',
-  import.meta.url,
-)
-const migration3Url = new URL(
-  '../prisma/migrations/20261021100000_add_match_lifecycle_foundation/migration.sql',
-  import.meta.url,
-)
-const migration4Url = new URL(
-  '../prisma/migrations/20261021110000_add_timer_engine_foundation/migration.sql',
-  import.meta.url,
-)
-const migration5Url = new URL(
-  '../prisma/migrations/20261021120000_add_goal_intent/migration.sql',
-  import.meta.url,
-)
 
 const origin = 'http://localhost:3000'
 
@@ -76,18 +56,7 @@ describe('Team & Match Management (T-01 - T-04)', () => {
   before(async () => {
     const directory = await mkdtemp(join(tmpdir(), 'mrc-x-teams-'))
     const databasePath = join(directory, 'teams.db')
-    const m1 = await readFile(migration1Url, 'utf8')
-    const m2 = await readFile(migration2Url, 'utf8')
-    const m3 = await readFile(migration3Url, 'utf8')
-    const m4 = await readFile(migration4Url, 'utf8')
-    const m5 = await readFile(migration5Url, 'utf8')
-    const db = new Database(databasePath)
-    db.exec(m1)
-    db.exec(m2)
-    db.exec(m3)
-    db.exec(m4)
-    db.exec(m5)
-    db.close()
+    await createMigratedDatabase(databasePath)
 
     connection = new DatabaseConnection(`file:${databasePath}`)
     await connection.connect()

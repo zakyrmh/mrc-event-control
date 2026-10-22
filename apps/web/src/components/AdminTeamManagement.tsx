@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
+import { MatchSchedulePanel } from './MatchSchedulePanel'
 import './AdminTeamManagement.css'
 
 export interface Category {
@@ -32,6 +33,7 @@ export interface Match {
   id: string
   categoryId: string
   groupId: string | null
+  stage: string
   stageLabel: string | null
   scheduledAt: string | null
   sequence: number
@@ -40,6 +42,9 @@ export interface Match {
   status: string
   matchVersion: number
   hasStarted: boolean
+  tieId: string | null
+  rondeNumber: number | null
+  generationBatchId: string | null
   category?: { code: string; label: string }
   group?: { name: string }
   teamA?: { code: string; name: string }
@@ -122,7 +127,8 @@ export function AdminTeamManagement() {
   const [matchTeamA, setMatchTeamA] = useState('')
   const [matchTeamB, setMatchTeamB] = useState('')
   const [matchSequence, setMatchSequence] = useState(1)
-  const [matchStage, setMatchStage] = useState('Penyisihan')
+  const [matchStage, setMatchStage] = useState('Babak Grup')
+  const [matchStageValue, setMatchStageValue] = useState('GROUP')
 
   const loadData = useCallback(async () => {
     try {
@@ -444,6 +450,7 @@ export function AdminTeamManagement() {
         body: JSON.stringify({
           categoryId: matchCategory,
           groupId: matchGroup || null,
+          stage: matchStageValue,
           sequence: Number(matchSequence),
           stageLabel: matchStage.trim() || null,
           teamAId: matchTeamA,
@@ -868,9 +875,27 @@ export function AdminTeamManagement() {
 
       {/* TAB: MATCHES */}
       {activeTab === 'matches' && !loading && (
-        <section className="section-panel">
-          <h2>Jadwal Manual Pertandingan</h2>
-          <form onSubmit={handleCreateMatch} className="form-grid">
+        <>
+          <MatchSchedulePanel
+            categories={categories}
+            groups={groups}
+            matches={matches}
+            csrfToken={csrfToken}
+            sessionActive={session?.role === 'SUPER_ADMIN'}
+            onChanged={() => {
+              void loadData()
+            }}
+            onError={setErrorMessage}
+          />
+
+          <section className="section-panel">
+            <details className="schedule-manual-details">
+              <summary>Tambahkan Jadwal Manual</summary>
+              <p className="schedule-field-note">
+                Gunakan formulir ini hanya untuk pertandingan di luar generate otomatis,
+                misalnya babak gugur. Nomor urut harus belum dipakai pada kategori yang sama.
+              </p>
+              <form onSubmit={handleCreateMatch} className="form-grid">
             <div className="form-field">
               <label htmlFor="m-cat">Kategori</label>
               <select
@@ -890,7 +915,19 @@ export function AdminTeamManagement() {
               </select>
             </div>
             <div className="form-field">
-              <label htmlFor="m-stage">Babak / Tahap</label>
+              <label htmlFor="m-stage-value">Tahap</label>
+              <select
+                id="m-stage-value"
+                value={matchStageValue}
+                onChange={(e) => setMatchStageValue(e.target.value)}
+              >
+                <option value="GROUP">Babak Grup</option>
+                <option value="KNOCKOUT">Babak Gugur</option>
+                <option value="FINAL">Final</option>
+              </select>
+            </div>
+            <div className="form-field">
+              <label htmlFor="m-stage">Label Babak / Tahap</label>
               <input
                 id="m-stage"
                 type="text"
@@ -957,41 +994,45 @@ export function AdminTeamManagement() {
             </div>
           </form>
 
-          <hr style={{ margin: '1.5rem 0', borderColor: '#e2e8f0' }} />
+              <hr style={{ margin: '1.5rem 0', borderColor: '#e2e8f0' }} />
 
-          {matches.length === 0 ? (
-            <div className="state-box empty">Belum ada pertandingan yang dijadwalkan.</div>
-          ) : (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>No</th>
-                  <th>Kategori</th>
-                  <th>Babak</th>
-                  <th>Tim A</th>
-                  <th>vs</th>
-                  <th>Tim B</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {matches.map((m) => (
-                  <tr key={m.id}>
-                    <td><strong>#{m.sequence}</strong></td>
-                    <td>{m.category?.label ?? m.categoryId}</td>
-                    <td>{m.stageLabel ?? '—'}</td>
-                    <td>{m.teamA?.name ?? m.teamAId}</td>
-                    <td><span style={{ color: '#94a3b8' }}>vs</span></td>
-                    <td>{m.teamB?.name ?? m.teamBId}</td>
-                    <td>
-                      <span className="status-badge active">{m.status}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
+              {matches.length === 0 ? (
+                <div className="state-box empty">Belum ada pertandingan yang dijadwalkan.</div>
+              ) : (
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>No</th>
+                      <th>Kategori</th>
+                      <th>Grup</th>
+                      <th>Tahap</th>
+                      <th>Tim A</th>
+                      <th>vs</th>
+                      <th>Tim B</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {matches.map((m) => (
+                      <tr key={m.id}>
+                        <td><strong>#{m.sequence}</strong></td>
+                        <td>{m.category?.label ?? m.categoryId}</td>
+                        <td>{m.group?.name ?? '—'}</td>
+                        <td>{m.stageLabel ?? m.stage}</td>
+                        <td>{m.teamA?.name ?? m.teamAId}</td>
+                        <td><span style={{ color: '#94a3b8' }}>vs</span></td>
+                        <td>{m.teamB?.name ?? m.teamBId}</td>
+                        <td>
+                          <span className="status-badge active">{m.status}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </details>
+          </section>
+        </>
       )}
     </div>
   )

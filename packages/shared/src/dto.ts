@@ -57,6 +57,8 @@ export const matchScheduleInputSchema = z
   .strictObject({
     categoryId: idSchema,
     groupId: idSchema.nullable().optional(),
+    /** Defaults to the group stage when omitted, preserving the manual form. */
+    stage: z.enum(['GROUP', 'KNOCKOUT', 'FINAL']).optional(),
     stageLabel: nullableOptionalString(120),
     scheduledAt: utcDateTimeSchema.nullable().optional(),
     sequence: z.int().positive(),
@@ -142,6 +144,127 @@ export const matchSchedulePatchInputSchema = z.strictObject({
   teamBId: idSchema.optional(),
 })
 export type MatchSchedulePatchInput = z.infer<typeof matchSchedulePatchInputSchema>
+
+// --- Schedule Generation (005 SG-01 s/d SG-09) ---
+export const matchStageSchema = z.enum(['GROUP', 'KNOCKOUT', 'FINAL'])
+export type MatchStage = z.infer<typeof matchStageSchema>
+
+const rondeCountSchema = z.int().positive().max(99)
+
+export const scheduleGenerateInputSchema = z.strictObject({
+  categoryId: idSchema,
+  stage: matchStageSchema,
+  rondeCount: rondeCountSchema,
+  stageLabel: nullableOptionalString(120),
+  /** Empty or omitted means every group in the category. */
+  groupIds: z.array(idSchema).max(200).optional(),
+  expectedCatalogRevision: revisionSchema,
+  /** Persist rondeCount into TieConfig when the generate commits. */
+  saveTieConfig: z.boolean().optional(),
+})
+export type ScheduleGenerateInput = z.infer<typeof scheduleGenerateInputSchema>
+
+export const scheduleReorderInputSchema = z
+  .strictObject({
+    categoryId: idSchema,
+    expectedCatalogRevision: revisionSchema,
+    orderedMatchIds: z.array(idSchema).min(1).max(2000),
+  })
+  .refine(
+    ({ orderedMatchIds }) =>
+      new Set(orderedMatchIds).size === orderedMatchIds.length,
+    { message: 'Daftar urutan memuat id ganda', path: ['orderedMatchIds'] },
+  )
+export type ScheduleReorderInput = z.infer<typeof scheduleReorderInputSchema>
+
+export const tieConfigInputSchema = z.strictObject({
+  categoryId: idSchema,
+  stage: matchStageSchema,
+  rondeCount: rondeCountSchema,
+  approvedBy: nullableOptionalString(160),
+  sourceNote: nullableOptionalString(400),
+  /** Omit on first save; required when updating an existing configuration. */
+  expectedRevision: revisionSchema.optional(),
+})
+export type TieConfigInput = z.infer<typeof tieConfigInputSchema>
+
+export const tieConfigSchema = z.strictObject({
+  id: idSchema,
+  categoryId: idSchema,
+  stage: matchStageSchema,
+  rondeCount: z.int().positive(),
+  approvedBy: z.string().nullable(),
+  sourceNote: z.string().nullable(),
+  revision: revisionSchema,
+})
+export type TieConfig = z.infer<typeof tieConfigSchema>
+
+export const schedulePreviewGroupSchema = z.strictObject({
+  groupId: idSchema,
+  groupName: nonBlankStringSchema,
+  teamCount: z.int().nonnegative(),
+  plannedCount: z.int().nonnegative(),
+  existingCount: z.int().nonnegative(),
+  newCount: z.int().nonnegative(),
+  matches: z.array(
+    z.strictObject({
+      tieId: idSchema,
+      roundIndex: z.int().positive(),
+      rondeNumber: z.int().positive(),
+      teamAId: idSchema,
+      teamACode: nonBlankStringSchema,
+      teamAName: nonBlankStringSchema,
+      teamBId: idSchema,
+      teamBCode: nonBlankStringSchema,
+      teamBName: nonBlankStringSchema,
+      exists: z.boolean(),
+    }),
+  ),
+})
+export type SchedulePreviewGroup = z.infer<typeof schedulePreviewGroupSchema>
+
+export const schedulePreviewSchema = z.strictObject({
+  categoryId: idSchema,
+  categoryCode: nonBlankStringSchema,
+  categoryLabel: nonBlankStringSchema,
+  stage: matchStageSchema,
+  stageLabel: z.string().nullable(),
+  rondeCount: z.int().positive(),
+  catalogRevision: revisionSchema,
+  totalPlanned: z.int().nonnegative(),
+  totalNew: z.int().nonnegative(),
+  totalExisting: z.int().nonnegative(),
+  groups: z.array(schedulePreviewGroupSchema),
+})
+export type SchedulePreview = z.infer<typeof schedulePreviewSchema>
+
+export const scheduleSkippedEntrySchema = z.strictObject({
+  groupId: idSchema,
+  groupName: nonBlankStringSchema,
+  tieId: idSchema,
+  rondeNumber: z.int().positive(),
+  reason: z.enum(['ALREADY_EXISTS']),
+})
+export type ScheduleSkippedEntry = z.infer<typeof scheduleSkippedEntrySchema>
+
+export const scheduleGenerateResultSchema = z.strictObject({
+  batchId: idSchema,
+  categoryId: idSchema,
+  stage: matchStageSchema,
+  rondeCount: z.int().positive(),
+  created: z.int().nonnegative(),
+  skipped: z.array(scheduleSkippedEntrySchema),
+  groups: z.array(
+    z.strictObject({
+      groupId: idSchema,
+      groupName: nonBlankStringSchema,
+      created: z.int().nonnegative(),
+      skipped: z.int().nonnegative(),
+    }),
+  ),
+  catalogRevision: revisionSchema,
+})
+export type ScheduleGenerateResult = z.infer<typeof scheduleGenerateResultSchema>
 
 // --- Public Broadcast & Overlay Projections (004 OB-01 s/d OB-04) ---
 export const broadcastModeSchema = z.enum(['AUTO', 'WAITING', 'EMERGENCY'])

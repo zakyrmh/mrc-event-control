@@ -56,3 +56,7 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Cadangan database lokal tidak pernah masuk repositori
+apps/server/data/backups/
+*.bak

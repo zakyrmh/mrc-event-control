@@ -58,7 +58,13 @@ S=super-admin, O=operator (S juga boleh), P=publik terbatas. List memakai `curso
 | POST `/teams`; PATCH `/teams/{id}` | S | categoryId/code/name/institution, groupId nullable; arsip via archived=true |
 | POST `/team-imports/preview` | S | teks CSV UTF-8 + expectedRevision katalog → jobId, errors per baris, diff, hash; belum mengubah tim |
 | POST `/team-imports/{id}/commit` | S | previewHash + expectedRevision; atomic all-or-nothing, tanpa overwrite implisit |
-| POST `/matches`; PATCH `/matches/{id}` | S | kategori/grup/tahap/Tim A/Tim B/jadwal; identitas hanya saat SCHEDULED belum bermain |
+| POST `/matches`; PATCH `/matches/{id}` | S | kategori/grup/tahap/Tim A/Tim B/jadwal; identitas hanya saat SCHEDULED belum bermain. `stage` (`GROUP`/`KNOCKOUT`/`FINAL`) opsional, bawaan `GROUP`. Nomor urut unik per kategori; bentrok menghasilkan 409 |
+| GET `/match-schedules/group-preview` | S | `categoryId`, `stage`, `rondeCount` wajib, `groupIds` opsional; menghitung round robin tanpa menulis; melaporkan `exists` per baris |
+| POST `/match-schedules/generate` | S | `categoryId`/`stage`/`rondeCount`/`expectedCatalogRevision`/`saveTieConfig`; atomik dan idempoten; melaporkan `created` dan `skipped[]` |
+| POST `/match-schedules/reorder` | S | `orderedMatchIds` lengkap kategori; server menomori ulang 1..N dalam satu transaksi; daftar tidak lengkap ditolak 422 |
+| POST `/match-schedules/{batchId}/rollback` | S | hapus permanen seluruh match batch; ditolak 409 bila satu match sudah dimainkan atau punya segmen/gol/revisi |
+| GET `/match-schedules/batches`; GET `/match-schedules/catalog-revision` | S | riwayat batch per kategori; revisi katalog ringan untuk pengikat reorder |
+| GET/PUT `/tie-configs` | S | `rondeCount` per `categoryId`+`stage`; PUT baru tanpa `expectedRevision`, ubah wajib menyertakannya |
 | GET/PUT `/timer-configs/{id}` | O / S | phaseType/category/stage/initialMs/sourceNote/approvedBy; default null tak bisa start |
 | GET/POST `/users`; PATCH `/users/{id}` | S | akun operator, role/enabled/password reset; password tidak dikembalikan |
 | GET `/audit` | S | filter match/actor/waktu/action, pagination; hasil tersaring rahasia |

@@ -6,6 +6,7 @@ import Fastify, {
   type FastifyServerOptions,
 } from 'fastify'
 import fastifyStatic from '@fastify/static'
+import { Prisma } from '@prisma/client'
 import type { ApiErrorEnvelope, FieldError } from '@mrc-x/shared/server'
 import type { PrismaClient } from '@prisma/client'
 import { registerAuth, type AuthOptions } from './auth.js'
@@ -13,6 +14,7 @@ import { registerBroadcastRoutes } from './broadcast-routes.js'
 import { BroadcastService } from './broadcast-service.js'
 import { registerHistoricalRoutes } from './historical-routes.js'
 import { registerMatchRoutes } from './match-routes.js'
+import { registerScheduleRoutes } from './schedule-routes.js'
 import { registerTeamRoutes } from './team-routes.js'
 import type { TimerService } from './timer-service.js'
 
@@ -115,6 +117,7 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   if (client !== undefined) {
     registerTeamRoutes(server, client)
     registerMatchRoutes(server, client, options.timerService)
+    registerScheduleRoutes(server, client)
     registerHistoricalRoutes(server, client)
 
     const broadcastService =
@@ -173,6 +176,22 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
           'Permintaan tidak valid.',
           false,
           fieldErrors,
+        ),
+      )
+    }
+
+    // A duplicate sequence inside one category is a user-visible conflict, not a
+    // server fault. Report it as such instead of leaking a 500.
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      return reply.code(409).send(
+        errorEnvelope(
+          request.id,
+          'VERSION_CONFLICT',
+          'Nomor urut tersebut sudah dipakai pertandingan lain pada kategori ini.',
+          false,
         ),
       )
     }

@@ -12,6 +12,16 @@ Tujuan: menyamakan bahasa panitia dan pengembang. Cakupan: pertandingan lokal da
 
 **Segmen**: bagian pertandingan; disebut start untuk LF, ronde untuk Sumo, dan babak untuk Soccer. Jumlahnya mengikuti keputusan juri yang telah diverifikasi.
 
+**Tahap**: fase turnamen tempat sebuah pertandingan berada: babak grup (`GROUP`), babak gugur (`KNOCKOUT`), atau final (`FINAL`). Tahap adalah atribut jadwal, bukan hasil. Sistem tidak menetapkan peserta tahap berikutnya.
+
+**Putaran**: satu gelombang pertandingan yang dimainkan bergantian, misalnya "putaran 1" memuat satu pertandingan dari setiap grup. Putaran adalah alat bantu penjadwalan dan tidak menambah poin.
+
+**Tie**: pertemuan dua tim pada satu tahap yang terdiri atas beberapa ronde. Tie memakai identitas tetap sehingga menjadwal ulang tidak menggandakan pertandingan.
+
+**Ronde**: satu game di dalam satu tie, disebut juga *leg*. Ronde adalah istilah lintas kategori; nama per kategori mengikuti **Segmen** di atas (start untuk LF, ronde untuk Sumo, babak untuk Soccer). Setiap ronde dicatat sebagai satu pertandingan tersendiri agar gol dan timer tidak tercampur antar ronde.
+
+**Babak**: dipakai panitia pada label seperti "Babak Grup" dan "Babak Gugur". Karena kata ini juga berarti segmen Soccer, istilah kanonik untuk fase turnamen adalah **Tahap**.
+
 **Timer pertandingan**: hitung mundur segmen yang sedang dimainkan. Timer pemanggilan, pemanasan, dan jeda mempunyai tujuan terpisah.
 
 **Gol Soccer**: jumlah gol yang dicatat operator berdasarkan keputusan wasit; bukan poin klasemen atau hasil adu penalti.
@@ -29,6 +39,8 @@ Tujuan: menyamakan bahasa panitia dan pengembang. Cakupan: pertandingan lokal da
 ## Keputusan Terbuka
 
 [NEEDS CONFIRMATION] Istilah resmi tahap dan metode penilaian setiap kategori menunggu rulebook/technical meeting; gunakan [D-04 sampai D-10](docs/01-product/RULEBOOK_NOTES.md).
+
+[TERDEFINISI SEBAGIAN] Jumlah ronde per tie kini wajib diisi panitia lewat aplikasi dan tersimpan per kategori + tahap. Nilai angkanya sendiri belum ditetapkan rulebook, jadi aplikasi tidak memakai nilai bawaan. Format babak gugur sudah disepakati panitia tetapi belum dijalankan sistem; lihat [D-08](docs/01-product/RULEBOOK_NOTES.md).
 
 ## Bahasa Pemulihan dan Kendali
 
