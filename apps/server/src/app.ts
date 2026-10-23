@@ -115,11 +115,6 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
 
   const client = options.client ?? options.auth?.client
   if (client !== undefined) {
-    registerTeamRoutes(server, client)
-    registerMatchRoutes(server, client, options.timerService)
-    registerScheduleRoutes(server, client)
-    registerHistoricalRoutes(server, client)
-
     const broadcastService =
       options.broadcastService ??
       new BroadcastService({
@@ -128,6 +123,10 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
         runtimeId: 'server-runtime-main',
       })
     registerBroadcastRoutes(server, broadcastService)
+    registerTeamRoutes(server, client)
+    registerMatchRoutes(server, client, options.timerService, broadcastService)
+    registerScheduleRoutes(server, client)
+    registerHistoricalRoutes(server, client)
   }
 
   if (options.staticRoot) {

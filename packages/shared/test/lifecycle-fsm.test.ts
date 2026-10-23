@@ -90,6 +90,17 @@ describe('Match Lifecycle FSM & Guards (L-02 / TC-03 / TC-04 / TC-12)', () => {
       assert.equal(finRes.allowed, true)
       assert.equal(finRes.targetStatus, 'COMPLETED')
       assert.equal(finRes.targetPhase, 'FINISHED')
+
+      // Finalize directly from COMPETITION when timer is not running
+      const compFinRes = evaluateMatchTransition('IN_PROGRESS', 'COMPETITION', { type: 'finalize' }, operatorContext)
+      assert.equal(compFinRes.allowed, true)
+      assert.equal(compFinRes.targetStatus, 'COMPLETED')
+      assert.equal(compFinRes.targetPhase, 'FINISHED')
+
+      // Reject finalize if timer is running
+      const blockedRes = evaluateMatchTransition('IN_PROGRESS', 'COMPETITION', { type: 'finalize' }, { ...operatorContext, timerRunning: true })
+      assert.equal(blockedRes.allowed, false)
+      assert.equal(blockedRes.errorCode, 'INVALID_TRANSITION')
     })
   })
 

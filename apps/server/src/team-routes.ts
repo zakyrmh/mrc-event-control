@@ -1082,6 +1082,20 @@ export function registerTeamRoutes(
           teamB: {
             select: { id: true, code: true, name: true, institution: true },
           },
+          results: {
+            where: { status: 'FINAL' },
+            select: {
+              revision: true,
+              status: true,
+              decisionText: true,
+              winnerTeamId: true,
+              finalGoalsA: true,
+              finalGoalsB: true,
+              pointsA: true,
+              pointsB: true,
+              refereeReference: true,
+            },
+          },
         },
         orderBy: [{ sequence: 'asc' }, { scheduledAt: 'asc' }],
       })

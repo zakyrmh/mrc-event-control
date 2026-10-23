@@ -77,11 +77,16 @@ export class ProjectionService {
     return this.broadcastRevision
   }
 
-  async getPublicSnapshot(): Promise<PublicBroadcastSnapshot> {
+  async getPublicSnapshot(arenaId?: string): Promise<PublicBroadcastSnapshot> {
     const serverNowUtc = new Date().toISOString()
-    const arena = await this.client.arenaState.findUnique({
-      where: { id: 'main' },
-    })
+    let arena = arenaId ? await this.client.arenaState.findUnique({ where: { id: arenaId } }) : null
+    if (!arena?.activeMatchId) {
+      // Smart fallback: prioritize arena with an active match if none or idle specified
+      arena = (await this.client.arenaState.findFirst({ where: { activeMatchId: { not: null } } })) ?? arena
+    }
+    if (!arena) {
+      arena = await this.client.arenaState.findUnique({ where: { id: 'main' } })
+    }
 
     const arenaVersion = arena?.arenaVersion ?? 1
     const activeMatchId = arena?.activeMatchId
@@ -172,7 +177,7 @@ export class ProjectionService {
     let timerProj: PublicTimerProjection
     if (this.timerService) {
       try {
-        const snap = await this.timerService.getSnapshot()
+        const snap = await this.timerService.getSnapshot(match.id)
         timerProj = {
           timerId: snap.id,
           state: snap.state,

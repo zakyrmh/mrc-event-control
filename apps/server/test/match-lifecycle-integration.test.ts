@@ -781,6 +781,26 @@ describe('Match Lifecycle Integration with Timer & Arena (L-04 / TC-02, TC-03, T
     match1Version = data.matchVersion
   })
 
+  it('rejects result.finalize with invalid/stub draftRevisionId (404 NOT_FOUND)', async () => {
+    // Proves that the old hardcoded draftRevisionId: 'rev-id' in the UI stub was doomed to fail.
+    const res = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: operatorSession.cookie,
+        origin,
+        'x-csrf-token': operatorSession.csrfToken,
+      },
+      payload: {
+        action: 'result.finalize',
+        draftRevisionId: 'rev-id',
+        expectedMatchVersion: match1Version,
+      },
+    })
+    assert.equal(res.statusCode, 404)
+    assert.equal(res.json().error?.code, 'NOT_FOUND')
+  })
+
   it('finalizes result (result.finalize), marking match COMPLETED and releasing arena (TC-09)', async () => {
     const finRes = await server.inject({
       method: 'POST',
@@ -894,5 +914,25 @@ describe('Match Lifecycle Integration with Timer & Arena (L-04 / TC-02, TC-03, T
       where: { id: correctionDraftId },
     })
     assert.equal(rev2?.status, 'FINAL')
+  })
+
+  it('supports multi-arena isolation: arena-1 and arena-2 operate concurrently', async () => {
+    // Query arena-1
+    const a1Res = await server.inject({
+      method: 'GET',
+      url: '/api/v1/arenas/arena-1',
+      headers: { cookie: operatorSession.cookie, origin },
+    })
+    assert.equal(a1Res.statusCode, 200)
+    assert.equal(a1Res.json().arena.id, 'arena-1')
+
+    // Query arena-2
+    const a2Res = await server.inject({
+      method: 'GET',
+      url: '/api/v1/arenas/arena-2',
+      headers: { cookie: operatorSession.cookie, origin },
+    })
+    assert.equal(a2Res.statusCode, 200)
+    assert.equal(a2Res.json().arena.id, 'arena-2')
   })
 })

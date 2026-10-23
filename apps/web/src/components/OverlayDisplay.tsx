@@ -1,25 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PublicBroadcastSnapshot } from '@mrc-x/shared'
 import { io, type Socket } from 'socket.io-client'
+import { formatTime } from '../constants/ui-labels'
 import './OverlayDisplay.css'
 
 export interface OverlayDisplayProps {
   clientRole?: 'OBS_BROWSER_SOURCE' | 'DASHBOARD_PREVIEW'
   serverUrl?: string
   initialSnapshot?: PublicBroadcastSnapshot | null
-}
-
-function formatTime(remainingMs: number): string {
-  const totalSeconds = Math.max(0, Math.floor(remainingMs / 1000))
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+  arenaId?: string
+  onTimerUpdate?: (remainingMs: number, timerState: string) => void
 }
 
 export function OverlayDisplay({
   clientRole = 'OBS_BROWSER_SOURCE',
   serverUrl,
   initialSnapshot = null,
+  arenaId,
+  onTimerUpdate,
 }: OverlayDisplayProps) {
   const [snapshot, setSnapshot] = useState<PublicBroadcastSnapshot | null>(initialSnapshot)
   const [interpolatedMs, setInterpolatedMs] = useState<number>(0)
@@ -27,24 +25,61 @@ export function OverlayDisplay({
   const [connectionState, setConnectionState] = useState<'CONNECTED' | 'DISCONNECTED'>('DISCONNECTED')
   const [timerState, setTimerState] = useState<string>('IDLE')
 
-  const lastSyncTimeRef = useRef<number>(0)
-  const lastSyncRemainingRef = useRef<number>(0)
+  const onTimerUpdateRef = useRef(onTimerUpdate)
+  useEffect(() => {
+    onTimerUpdateRef.current = onTimerUpdate
+  }, [onTimerUpdate])
+
+  const lastHeartbeatTimeRef = useRef<number>(0)
+  const timerAnchorWallRef = useRef<number>(0)
+  const timerAnchorRemainingRef = useRef<number>(0)
   const timerStateRef = useRef<string>('IDLE')
   const clientInstanceIdRef = useRef<string>('')
   const socketRef = useRef<Socket | null>(null)
+
+  const effectiveArena =
+    arenaId ??
+    (typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('arena') ?? undefined
+      : undefined)
+
+  const syncTimerSnapshot = (remainingMs: number, state: string) => {
+    timerAnchorWallRef.current = Date.now()
+    timerAnchorRemainingRef.current = remainingMs
+    timerStateRef.current = state
+    setTimerState(state)
+    setInterpolatedMs(remainingMs)
+    onTimerUpdateRef.current?.(remainingMs, state)
+  }
 
   // Socket connection to /overlay namespace
   useEffect(() => {
     if (!clientInstanceIdRef.current) {
       clientInstanceIdRef.current = `client-${clientRole}-${Math.random().toString(36).substring(2, 9)}`
     }
-    lastSyncTimeRef.current = Date.now()
+    lastHeartbeatTimeRef.current = Date.now()
 
     const origin = serverUrl ?? window.location.origin
+
+    // Initial snapshot fetch via REST
+    const queryStr = effectiveArena ? `?arena=${encodeURIComponent(effectiveArena)}` : ''
+    fetch(`${origin}/api/v1/broadcast/main${queryStr}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: PublicBroadcastSnapshot | null) => {
+        if (data) {
+          setSnapshot(data)
+          if (data.match?.timer) {
+            syncTimerSnapshot(data.match.timer.remainingMs, data.match.timer.state)
+          }
+        }
+      })
+      .catch(() => {})
+
     const socket = io(`${origin}/overlay`, {
       transports: ['websocket', 'polling'],
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
+      query: effectiveArena ? { arena: effectiveArena } : undefined,
     })
     socketRef.current = socket
 
@@ -59,14 +94,11 @@ export function OverlayDisplay({
 
     socket.on('state.snapshot', (data: PublicBroadcastSnapshot) => {
       setSnapshot(data)
-      lastSyncTimeRef.current = Date.now()
+      lastHeartbeatTimeRef.current = Date.now()
       setIsStale(false)
 
       if (data.match?.timer) {
-        lastSyncRemainingRef.current = data.match.timer.remainingMs
-        timerStateRef.current = data.match.timer.state
-        setTimerState(data.match.timer.state)
-        setInterpolatedMs(data.match.timer.remainingMs)
+        syncTimerSnapshot(data.match.timer.remainingMs, data.match.timer.state)
       }
 
       // Kirim telemetri ACK (BC-02)
@@ -84,14 +116,11 @@ export function OverlayDisplay({
 
     socket.on('match.updated', (data: PublicBroadcastSnapshot) => {
       setSnapshot(data)
-      lastSyncTimeRef.current = Date.now()
+      lastHeartbeatTimeRef.current = Date.now()
       setIsStale(false)
 
       if (data.match?.timer) {
-        lastSyncRemainingRef.current = data.match.timer.remainingMs
-        timerStateRef.current = data.match.timer.state
-        setTimerState(data.match.timer.state)
-        setInterpolatedMs(data.match.timer.remainingMs)
+        syncTimerSnapshot(data.match.timer.remainingMs, data.match.timer.state)
       }
 
       socket.emit('overlay.rendered', {
@@ -114,16 +143,13 @@ export function OverlayDisplay({
       remainingMs: number
       serverNowUtc: string
     }) => {
-      lastSyncTimeRef.current = Date.now()
-      lastSyncRemainingRef.current = sync.remainingMs
-      timerStateRef.current = sync.state
-      setTimerState(sync.state)
+      lastHeartbeatTimeRef.current = Date.now()
       setIsStale(false)
-      setInterpolatedMs(sync.remainingMs)
+      syncTimerSnapshot(sync.remainingMs, sync.state)
     })
 
     socket.on('connection.heartbeat', (_hb) => {
-      lastSyncTimeRef.current = Date.now()
+      lastHeartbeatTimeRef.current = Date.now()
       setIsStale(false)
     })
 
@@ -131,24 +157,27 @@ export function OverlayDisplay({
       socket.disconnect()
       socketRef.current = null
     }
-  }, [serverUrl, clientRole])
+  }, [serverUrl, clientRole, effectiveArena])
 
   // Timer interpolation & Stale detection loop (100ms)
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now()
-      const elapsedSinceSync = now - lastSyncTimeRef.current
+      const elapsedSinceHeartbeat = now - lastHeartbeatTimeRef.current
 
       // Stale jika tidak ada heartbeat / sync >= 3000ms (BC-03)
-      if (elapsedSinceSync >= 3000) {
+      if (elapsedSinceHeartbeat >= 3000) {
         setIsStale(true)
       }
 
       if (timerStateRef.current === 'RUNNING') {
-        const remaining = Math.max(0, lastSyncRemainingRef.current - elapsedSinceSync)
+        const elapsedSinceAnchor = now - timerAnchorWallRef.current
+        const remaining = Math.max(0, timerAnchorRemainingRef.current - elapsedSinceAnchor)
         setInterpolatedMs(remaining)
+        onTimerUpdateRef.current?.(remaining, timerStateRef.current)
       } else {
-        setInterpolatedMs(lastSyncRemainingRef.current)
+        setInterpolatedMs(timerAnchorRemainingRef.current)
+        onTimerUpdateRef.current?.(timerAnchorRemainingRef.current, timerStateRef.current)
       }
     }, 100)
 

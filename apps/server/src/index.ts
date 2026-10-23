@@ -3,6 +3,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { buildServer } from './app.js'
 import { BroadcastService } from './broadcast-service.js'
+import { TimerService } from './timer-service.js'
 import {
   InMemoryControlSocketRegistry,
   registerControlSockets,
@@ -61,8 +62,14 @@ export async function startServer(
   const staticRoot =
     process.env.STATIC_ROOT ?? (existsSync(defaultStaticRoot) ? defaultStaticRoot : undefined)
 
+  const timerService = new TimerService({
+    client: connection.client,
+  })
+  await timerService.startupReconcile()
+
   const broadcastService = new BroadcastService({
     client: connection.client,
+    timerService,
     runtimeId: `runtime-${Date.now()}`,
   })
 
@@ -73,6 +80,7 @@ export async function startServer(
       controlSockets,
       secureCookies: process.env.COOKIE_SECURE === 'true',
     },
+    timerService,
     broadcastService,
     staticRoot,
     logger: true,

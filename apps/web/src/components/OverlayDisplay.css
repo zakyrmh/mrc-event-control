@@ -207,3 +207,31 @@
   font-size: 14px;
   color: rgba(255, 255, 255, 0.7);
 }
+
+/* Dashboard live preview scaling */
+.obs-overlay-viewport.is-preview {
+  width: 100%;
+  height: auto;
+  min-height: unset;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: transparent !important;
+  overflow: hidden;
+}
+
+.obs-overlay-viewport.is-preview .obs-score-card {
+  width: 960px;
+  max-width: none;
+  zoom: 0.33;
+  margin: 0 auto;
+  box-shadow: none;
+}
+
+@media (max-width: 1200px) {
+  .obs-overlay-viewport.is-preview .obs-score-card {
+    zoom: 0.28;
+  }
+}
+

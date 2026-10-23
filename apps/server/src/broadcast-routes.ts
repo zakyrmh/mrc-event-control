@@ -7,9 +7,10 @@ export function registerBroadcastRoutes(
   broadcastService: BroadcastService,
 ): void {
   // 1. GET /api/v1/broadcast/main — Public Broadcast Snapshot (No-Store)
-  server.get('/api/v1/broadcast/main', async (_request, reply) => {
+  server.get<{ Querystring: { arena?: string } }>('/api/v1/broadcast/main', async (request, reply) => {
     reply.header('Cache-Control', 'no-store, no-cache, must-revalidate')
-    const snapshot = await broadcastService.projection.getPublicSnapshot()
+    const arenaId = request.query?.arena
+    const snapshot = await broadcastService.projection.getPublicSnapshot(arenaId)
     return snapshot
   })
 

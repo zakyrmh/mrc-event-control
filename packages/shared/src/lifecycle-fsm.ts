@@ -306,11 +306,11 @@ export function evaluateMatchTransition(
           message: 'Pertandingan tidak dapat difinalisasi saat timer masih berjalan.',
         }
       }
-      if (currentP !== 'RESULT' && currentP !== 'FINISHED') {
+      if (currentP !== 'RESULT' && currentP !== 'FINISHED' && currentP !== 'COMPETITION') {
         return {
           allowed: false,
           errorCode: 'INVALID_TRANSITION',
-          message: 'Finalisasi hanya dapat dilakukan pada fase RESULT atau FINISHED.',
+          message: 'Finalisasi hanya dapat dilakukan pada fase RESULT, FINISHED, atau setelah ronde COMPETITION selesai.',
         }
       }
       return {

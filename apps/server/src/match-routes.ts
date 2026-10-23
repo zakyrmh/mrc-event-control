@@ -8,6 +8,7 @@ import {
   type UserRole,
 } from '@mrc-x/shared/server'
 import type { TimerService } from './timer-service.js'
+import type { BroadcastService } from './broadcast-service.js'
 
 function errorResponse(
   reply: FastifyReply,
@@ -28,11 +29,11 @@ function errorResponse(
   })
 }
 
-async function getOrCreateArena(client: Prisma.TransactionClient | PrismaClient) {
-  let arena = await client.arenaState.findUnique({ where: { id: 'main' } })
+async function getOrCreateArena(client: Prisma.TransactionClient | PrismaClient, arenaId: string = 'main') {
+  let arena = await client.arenaState.findUnique({ where: { id: arenaId } })
   if (!arena) {
     arena = await client.arenaState.create({
-      data: { id: 'main', arenaVersion: 1 },
+      data: { id: arenaId, arenaVersion: 1 },
     })
   }
   return arena
@@ -55,13 +56,15 @@ export function registerMatchRoutes(
   server: FastifyInstance,
   client: PrismaClient,
   timerService?: TimerService,
+  broadcastService?: BroadcastService,
 ): void {
-  // --- ARENA QUERY (GET /api/v1/arenas/main) ---
+  // --- ARENA QUERY (GET /api/v1/arenas/:arenaId) ---
   server.get(
-    '/api/v1/arenas/main',
+    '/api/v1/arenas/:arenaId',
     { config: { auth: { roles: ['OPERATOR', 'SUPER_ADMIN'] } } },
-    async (_request: FastifyRequest, reply) => {
-      const arena = await getOrCreateArena(client)
+    async (request: FastifyRequest<{ Params: { arenaId: string } }>, reply) => {
+      const arenaId = request.params.arenaId || 'main'
+      const arena = await getOrCreateArena(client, arenaId)
       let activeMatch = null
       if (arena.activeMatchId) {
         activeMatch = await client.match.findUnique({
@@ -111,9 +114,10 @@ export function registerMatchRoutes(
 
   // --- ARENA COMMANDS (match.select, match.release) ---
   server.post(
-    '/api/v1/arenas/main/commands',
+    '/api/v1/arenas/:arenaId/commands',
     { config: { auth: { roles: ['OPERATOR', 'SUPER_ADMIN'] } } },
-    async (request: FastifyRequest, reply) => {
+    async (request: FastifyRequest<{ Params: { arenaId: string } }>, reply) => {
+      const arenaId = request.params.arenaId || 'main'
       const body = request.body as Record<string, unknown> | null
       const action = body?.action
       const role = (request.authPrincipal?.role ?? 'OPERATOR') as UserRole
@@ -127,7 +131,7 @@ export function registerMatchRoutes(
           return errorResponse(reply, 422, 'INVALID_INPUT', 'Parameter matchId, expectedArenaVersion, dan expectedMatchVersion wajib diisi.', request.id)
         }
 
-        const arena = await getOrCreateArena(client)
+        const arena = await getOrCreateArena(client, arenaId)
         if (arena.arenaVersion !== expectedArenaVersion) {
           return errorResponse(reply, 409, 'VERSION_CONFLICT', 'Arena version conflict.', request.id, { currentArenaVersion: arena.arenaVersion })
         }
@@ -135,7 +139,7 @@ export function registerMatchRoutes(
         if (arena.activeMatchId && arena.activeMatchId !== matchId) {
           const activeMatch = await client.match.findUnique({ where: { id: arena.activeMatchId } })
           if (activeMatch && activeMatch.status !== 'COMPLETED' && activeMatch.status !== 'CANCELLED') {
-            return errorResponse(reply, 409, 'ARENA_BUSY', 'Arena utama sedang digunakan oleh pertandingan lain yang belum selesai.', request.id)
+            return errorResponse(reply, 409, 'ARENA_BUSY', `Arena ${arenaId} sedang digunakan oleh pertandingan lain yang belum selesai.`, request.id)
           }
         }
 
@@ -168,7 +172,7 @@ export function registerMatchRoutes(
 
         const result = await client.$transaction(async (tx) => {
           const updatedArena = await tx.arenaState.update({
-            where: { id: 'main' },
+            where: { id: arena.id },
             data: { activeMatchId: match.id, arenaVersion: { increment: 1 } },
           })
 
@@ -197,6 +201,8 @@ export function registerMatchRoutes(
           return { arena: updatedArena, match: updatedMatch }
         })
 
+        void broadcastService?.broadcastUpdate(arenaId)
+
         return reply.code(200).send({
           arenaVersion: result.arena.arenaVersion,
           matchVersion: result.match.matchVersion,
@@ -216,12 +222,12 @@ export function registerMatchRoutes(
           return errorResponse(reply, 422, 'INVALID_INPUT', 'Parameter tidak lengkap.', request.id)
         }
 
-        const arena = await getOrCreateArena(client)
+        const arena = await getOrCreateArena(client, arenaId)
         if (arena.arenaVersion !== expectedArenaVersion) {
           return errorResponse(reply, 409, 'VERSION_CONFLICT', 'Arena version conflict.', request.id)
         }
         if (arena.activeMatchId !== matchId) {
-          return errorResponse(reply, 409, 'INVALID_TRANSITION', 'Match tidak aktif di arena utama.', request.id)
+          return errorResponse(reply, 409, 'INVALID_TRANSITION', `Match tidak aktif di arena ${arenaId}.`, request.id)
         }
 
         const match = await client.match.findUnique({ where: { id: matchId } })
@@ -245,7 +251,7 @@ export function registerMatchRoutes(
 
         const result = await client.$transaction(async (tx) => {
           const updatedArena = await tx.arenaState.update({
-            where: { id: 'main' },
+            where: { id: arena.id },
             data: { activeMatchId: null, arenaVersion: { increment: 1 } },
           })
 
@@ -272,6 +278,8 @@ export function registerMatchRoutes(
 
           return { arena: updatedArena, match: updatedMatch }
         })
+
+        void broadcastService?.broadcastUpdate(arenaId)
 
         return reply.code(200).send({
           arenaVersion: result.arena.arenaVersion,
@@ -326,7 +334,18 @@ export function registerMatchRoutes(
   // --- MATCH COMMANDS ---
   server.post(
     '/api/v1/matches/:id/commands',
-    { config: { auth: { roles: ['OPERATOR', 'SUPER_ADMIN'] } } },
+    {
+      config: { auth: { roles: ['OPERATOR', 'SUPER_ADMIN'] } },
+      onResponse: async (_request, reply) => {
+        if (reply.statusCode === 200 && broadcastService) {
+          try {
+            await broadcastService.broadcastUpdate()
+          } catch {
+            // ignore
+          }
+        }
+      },
+    },
     async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
       const matchId = request.params.id
       const body = request.body as Record<string, unknown> | null
@@ -357,7 +376,7 @@ export function registerMatchRoutes(
 
         if (timerService) {
           try {
-            timerService.armReadinessToken(readinessToken)
+            timerService.armReadinessToken(readinessToken, match.id)
           } catch {
             // ignore if no active timer
           }
@@ -397,6 +416,44 @@ export function registerMatchRoutes(
         return reply.code(200).send({
           disarmed: true,
           matchVersion: match.matchVersion,
+        })
+      }
+
+      if (action === 'warmup.start') {
+        const durationMs = typeof body?.durationMs === 'number' ? body.durationMs : 60_000
+        if (timerService) {
+          try {
+            await timerService.prepare({
+              matchId: match.id,
+              phaseType: 'WARMUP',
+              initialMs: durationMs,
+              actorId: request.authPrincipal?.userId ?? null,
+            })
+            await timerService.start({ matchId: match.id, actorId: request.authPrincipal?.userId ?? null })
+          } catch {
+            // ignore
+          }
+        }
+        return reply.code(200).send({
+          matchVersion: match.matchVersion,
+          phase: match.phase,
+          status: match.status,
+          durationMs,
+        })
+      }
+
+      if (action === 'warmup.pause') {
+        if (timerService) {
+          try {
+            await timerService.pause(match.id)
+          } catch {
+            // ignore
+          }
+        }
+        return reply.code(200).send({
+          matchVersion: match.matchVersion,
+          phase: match.phase,
+          status: match.status,
         })
       }
 
@@ -487,7 +544,7 @@ export function registerMatchRoutes(
         let isTimerRunning = false
         if (timerService) {
           try {
-            const snap = await timerService.getSnapshot()
+            const snap = await timerService.getSnapshot(match.id)
             isTimerRunning = snap.state === 'RUNNING'
           } catch {
             // no timer
@@ -506,7 +563,7 @@ export function registerMatchRoutes(
         }
 
         if (timerService && isTimerRunning) {
-          await timerService.pause()
+          await timerService.pause(match.id)
         }
 
         const updatedMatch = await client.$transaction(async (tx) => {
@@ -571,7 +628,7 @@ export function registerMatchRoutes(
         // Timer must not be running
         if (timerService) {
           try {
-            const snap = await timerService.getSnapshot()
+            const snap = await timerService.getSnapshot(match.id)
             if (snap.state === 'RUNNING') {
               return errorResponse(reply, 409, 'INVALID_TRANSITION', 'Tidak boleh mengulang segmen saat timer masih berjalan. Jeda/hentikan timer terlebih dahulu.', request.id)
             }
@@ -740,9 +797,17 @@ export function registerMatchRoutes(
         if (targetPhase === 'COMPETITION' && timerService) {
           try {
             const readinessToken = body?.readinessToken as string | undefined
-            await timerService.start({ readinessToken, actorId: request.authPrincipal?.userId ?? null })
+            await timerService.start({ readinessToken, actorId: request.authPrincipal?.userId ?? null, matchId: match.id })
           } catch {
             // ignore if no active timer or fake port
+          }
+        }
+
+        if (targetPhase !== 'COMPETITION' && timerService) {
+          try {
+            await timerService.pause(match.id)
+          } catch {
+            // ignore
           }
         }
 
@@ -768,7 +833,7 @@ export function registerMatchRoutes(
         }
 
         if (timerService) {
-          await timerService.pause()
+          await timerService.pause(match.id)
         }
 
         const updatedMatch = await client.$transaction(async (tx) => {
@@ -821,14 +886,15 @@ export function registerMatchRoutes(
         }
 
         if (timerService) {
-          await timerService.pause()
+          await timerService.pause(match.id)
         }
 
         const result = await client.$transaction(async (tx) => {
           let updatedArena = arena
-          if (arena.activeMatchId === match.id) {
+          const activeArena = await tx.arenaState.findFirst({ where: { activeMatchId: match.id } })
+          if (activeArena) {
             updatedArena = await tx.arenaState.update({
-              where: { id: 'main' },
+              where: { id: activeArena.id },
               data: { activeMatchId: null, arenaVersion: { increment: 1 } },
             })
           }
@@ -1361,8 +1427,15 @@ export function registerMatchRoutes(
         let isTimerRunning = false
         if (timerService) {
           try {
-            const snap = await timerService.getSnapshot()
-            isTimerRunning = snap.state === 'RUNNING'
+            const snap = await timerService.getSnapshot(match.id)
+            if (snap.state === 'RUNNING') {
+              if (snap.remainingMs <= 0 || match.phase === 'RESULT' || match.phase === 'FINISHED') {
+                await timerService.pause(match.id)
+                isTimerRunning = false
+              } else {
+                isTimerRunning = true
+              }
+            }
           } catch {
             // no timer
           }
@@ -1407,9 +1480,10 @@ export function registerMatchRoutes(
           })
 
           let updatedArena = arena
-          if (arena.activeMatchId === match.id) {
+          const activeArena = await tx.arenaState.findFirst({ where: { activeMatchId: match.id } })
+          if (activeArena) {
             updatedArena = await tx.arenaState.update({
-              where: { id: 'main' },
+              where: { id: activeArena.id },
               data: { activeMatchId: null, arenaVersion: { increment: 1 } },
             })
           }
@@ -1436,6 +1510,14 @@ export function registerMatchRoutes(
 
           return { match: updatedMatch, arena: updatedArena, revision: finalizedRev }
         })
+
+        if (timerService) {
+          try {
+            await timerService.pause(match.id)
+          } catch {
+            // ignore
+          }
+        }
 
         return reply.code(200).send({
           matchVersion: result.match.matchVersion,
@@ -1474,9 +1556,10 @@ export function registerMatchRoutes(
 
         const result = await client.$transaction(async (tx) => {
           let updatedArena = arena
-          if (arena.activeMatchId === match.id) {
+          const activeArena = await tx.arenaState.findFirst({ where: { activeMatchId: match.id } })
+          if (activeArena) {
             updatedArena = await tx.arenaState.update({
-              where: { id: 'main' },
+              where: { id: activeArena.id },
               data: { activeMatchId: null, arenaVersion: { increment: 1 } },
             })
           }

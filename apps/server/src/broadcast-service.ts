@@ -63,8 +63,12 @@ export class BroadcastService {
     this.overlayNs = io.of('/overlay')
 
     this.overlayNs.on('connection', async (socket: Socket) => {
+      const arenaId = (socket.handshake.query.arena as string) || undefined
+      if (arenaId) {
+        socket.join(`arena:${arenaId}`)
+      }
       // Saat connect, kirim snapshot penuh terbaru (OB-03 / BC-02)
-      const snapshot = await this.projection.getPublicSnapshot()
+      const snapshot = await this.projection.getPublicSnapshot(arenaId)
       socket.emit('state.snapshot', snapshot)
 
       socket.on('overlay.rendered', (data: ObsTelemetryInput) => {
@@ -91,6 +95,24 @@ export class BroadcastService {
           committedBroadcastRevision,
           storageHealth: 'HEALTHY',
         })
+
+        if (this.timerService) {
+          try {
+            const snap = await this.timerService.getSnapshot()
+            if (snap.state === 'RUNNING') {
+              this.broadcastTimerSync({
+                timerId: snap.id,
+                timerGeneration: snap.timerGeneration,
+                syncSeq: snap.checkpointSeq,
+                state: snap.state,
+                remainingMs: snap.remainingMs,
+                serverNowUtc,
+              })
+            }
+          } catch {
+            // no active running timer
+          }
+        }
       } catch {
         // Silently catch to avoid crashing server process
       }
@@ -106,9 +128,9 @@ export class BroadcastService {
     }
   }
 
-  async broadcastUpdate(): Promise<PublicBroadcastSnapshot> {
+  async broadcastUpdate(arenaId?: string): Promise<PublicBroadcastSnapshot> {
     this.projection.bumpBroadcastRevision()
-    const snapshot = await this.projection.getPublicSnapshot()
+    const snapshot = await this.projection.getPublicSnapshot(arenaId)
     this.overlayNs?.emit('match.updated', snapshot)
     return snapshot
   }

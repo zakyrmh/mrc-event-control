@@ -28,6 +28,7 @@ export class TimerService implements TimerPort {
   public readonly runtimeId: string
   private readonly clock: Clock
   private activeEngine: TimerEngine | null = null
+  private readonly enginesByMatch = new Map<string, TimerEngine>()
   private storageHealth: 'HEALTHY' | 'DEGRADED' | 'RECOVERY_PENDING' = 'HEALTHY'
 
   constructor(options: TimerServiceOptions) {
@@ -148,19 +149,21 @@ export class TimerService implements TimerPort {
       })
     })
 
+    this.enginesByMatch.set(options.matchId, engine)
     this.activeEngine = engine
     return snapshot
   }
 
-  async start(options?: StartTimerOptions): Promise<TimerSnapshot> {
+  async start(options?: StartTimerOptions & { matchId?: string }): Promise<TimerSnapshot> {
     if (this.storageHealth === 'DEGRADED') {
       throw new Error('STORAGE_DEGRADED')
     }
-    if (!this.activeEngine) {
+    const engine = (options?.matchId ? this.enginesByMatch.get(options.matchId) : null) ?? this.activeEngine
+    if (!engine) {
       throw new Error('NO_ACTIVE_TIMER_ENGINE')
     }
 
-    const snapshot = this.activeEngine.start(options?.readinessToken)
+    const snapshot = engine.start(options?.readinessToken ?? undefined)
 
     await this.client.$transaction(async (tx) => {
       await tx.timerInstance.update({
@@ -190,15 +193,16 @@ export class TimerService implements TimerPort {
     return snapshot
   }
 
-  async pause(): Promise<TimerSnapshot> {
+  async pause(matchId?: string): Promise<TimerSnapshot> {
     if (this.storageHealth === 'DEGRADED') {
       throw new Error('STORAGE_DEGRADED')
     }
-    if (!this.activeEngine) {
+    const engine = (matchId ? this.enginesByMatch.get(matchId) : null) ?? this.activeEngine
+    if (!engine) {
       throw new Error('NO_ACTIVE_TIMER_ENGINE')
     }
 
-    const snapshot = this.activeEngine.pause()
+    const snapshot = engine.pause()
 
     await this.client.$transaction(async (tx) => {
       await tx.timerInstance.update({
@@ -369,17 +373,19 @@ export class TimerService implements TimerPort {
     return snapshot
   }
 
-  async getSnapshot(): Promise<TimerSnapshot> {
-    if (this.activeEngine) {
-      return this.activeEngine.getSnapshot()
+  async getSnapshot(matchId?: string): Promise<TimerSnapshot> {
+    const engine = (matchId ? this.enginesByMatch.get(matchId) : null) ?? this.activeEngine
+    if (engine) {
+      return engine.getSnapshot()
     }
     throw new Error('NO_ACTIVE_TIMER_ENGINE')
   }
 
-  armReadinessToken(token: string): void {
-    if (!this.activeEngine) {
+  armReadinessToken(token: string, matchId?: string): void {
+    const engine = (matchId ? this.enginesByMatch.get(matchId) : null) ?? this.activeEngine
+    if (!engine) {
       throw new Error('NO_ACTIVE_TIMER_ENGINE')
     }
-    this.activeEngine.armReadinessToken(token)
+    engine.armReadinessToken(token)
   }
 }
