@@ -761,6 +761,8 @@ describe('Match Lifecycle Integration with Timer & Arena (L-04 / TC-02, TC-03, T
         winnerTeamId: teamAId,
         finalGoalsA: 1,
         finalGoalsB: 0,
+        pointsA: 3,
+        pointsB: 0,
         refereeReference: 'JURI-UTAMA-SOCCER-1',
         expectedMatchVersion: match1Version,
       },
@@ -772,6 +774,9 @@ describe('Match Lifecycle Integration with Timer & Arena (L-04 / TC-02, TC-03, T
     assert.equal(data.winnerTeamId, teamAId)
     assert.equal(data.finalGoalsA, 1)
     assert.equal(data.finalGoalsB, 0)
+    // Points are the jury's decision, recorded verbatim; the system never derives them.
+    assert.equal(data.pointsA, 3)
+    assert.equal(data.pointsB, 0)
     draftRevisionId = data.resultRevisionId
     match1Version = data.matchVersion
   })

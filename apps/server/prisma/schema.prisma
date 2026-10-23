@@ -380,6 +380,8 @@ model ResultRevision {
   winnerTeamId       String?
   finalGoalsA        Int?
   finalGoalsB        Int?
+  pointsA            Int?
+  pointsB            Int?
   refereeReference   String?
   authorityReference String?
   reason             String?

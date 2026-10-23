@@ -23,7 +23,7 @@
 | TimerConfig | id, categoryId, phaseType CALLING/WARMUP/COMPETITION/INTERMISSION, stageLabel opsional, initialMs nullable, approvedBy, sourceNote, revision; null berarti belum diputuskan |
 | TimerInstance | id, matchId, segmentAttemptId nullable, type, state, initialMs snapshot, remainingAtAnchorMs, anchorWallUtc, checkpointWallUtc, runtimeId, checkpointSeq, timerGeneration; durasi salinan tidak berubah saat default diubah |
 | GoalEvent | id, matchId, segmentAttemptId, side, delta +1/-1, correctsGoalId opsional, reason, actorId, commandId; hasil agregasi nonnegatif, bukan klasemen |
-| ResultRevision | id, matchId, revision, status DRAFT/FINAL/SUPERSEDED, decisionText, winnerTeamId nullable, finalGoalsA/B nullable, refereeReference, authorizedBy, finalizedBy/At, previousRevisionId, reopenReason; bukti persetujuan juri berupa referensi/catatan |
+| ResultRevision | id, matchId, revision, status DRAFT/FINAL/SUPERSEDED, decisionText, winnerTeamId nullable, finalGoalsA/B nullable, pointsA/B nullable (poin ditetapkan juri, sistem tidak menghitung), refereeReference, authorizedBy, finalizedBy/At, previousRevisionId, reopenReason; bukti persetujuan juri berupa referensi/catatan |
 | AuditEntry | id, commandId, actorId, timestampUtc, matchId opsional, action, beforeJson, afterJson, reason, authorityReference; append-only |
 | CommandReceipt | principalId, routeScope, idempotencyKey, payloadHash, responseJson, committedAt; unique principal+scope+key, disimpan sepanjang umur data acara |
 | OutboxEvent | eventId, broadcastRevision, matchId, type, payloadPublicJson, committedAt, dispatchedAt nullable; pengiriman minimal sekali |

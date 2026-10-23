@@ -1252,6 +1252,9 @@ export function registerMatchRoutes(
         const winnerTeamId = (body?.winnerTeamId as string) ?? null
         const finalGoalsA = typeof body?.finalGoalsA === 'number' ? body.finalGoalsA : null
         const finalGoalsB = typeof body?.finalGoalsB === 'number' ? body.finalGoalsB : null
+        // Points are decided by the jury and only recorded here; the system never computes them.
+        const pointsA = typeof body?.pointsA === 'number' ? body.pointsA : null
+        const pointsB = typeof body?.pointsB === 'number' ? body.pointsB : null
         const refereeReference = (body?.refereeReference as string) ?? null
         const reason = (body?.reason as string) ?? null
 
@@ -1260,6 +1263,9 @@ export function registerMatchRoutes(
         }
         if ((finalGoalsA !== null && finalGoalsA < 0) || (finalGoalsB !== null && finalGoalsB < 0)) {
           return errorResponse(reply, 422, 'INVALID_INPUT', 'finalGoals tidak boleh bernilai negatif.', request.id)
+        }
+        if ((pointsA !== null && pointsA < 0) || (pointsB !== null && pointsB < 0)) {
+          return errorResponse(reply, 422, 'INVALID_INPUT', 'points tidak boleh bernilai negatif.', request.id)
         }
         if (match.status === 'COMPLETED') {
           return errorResponse(reply, 409, 'INVALID_TRANSITION', 'Match yang telah COMPLETED tidak dapat membuat draft tanpa reopen oleh super-admin.', request.id)
@@ -1286,6 +1292,8 @@ export function registerMatchRoutes(
                 winnerTeamId,
                 finalGoalsA,
                 finalGoalsB,
+                pointsA,
+                pointsB,
                 refereeReference,
                 reason,
               },
@@ -1301,6 +1309,8 @@ export function registerMatchRoutes(
                 winnerTeamId,
                 finalGoalsA,
                 finalGoalsB,
+                pointsA,
+                pointsB,
                 refereeReference,
                 reason,
               },
@@ -1335,6 +1345,8 @@ export function registerMatchRoutes(
           winnerTeamId: result.revision.winnerTeamId,
           finalGoalsA: result.revision.finalGoalsA,
           finalGoalsB: result.revision.finalGoalsB,
+          pointsA: result.revision.pointsA,
+          pointsB: result.revision.pointsB,
         })
       }
 
