@@ -1600,6 +1600,7 @@ export function AdminTeamManagement() {
               categoryCode={currentAdminBracketCategory.code}
               categoryLabel={currentAdminBracketCategory.label}
               matches={adminBracketMatches}
+              groupWinners={seedPreview?.groupWinners}
               readOnly={true}
             />
           ) : (

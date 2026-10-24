@@ -1443,6 +1443,9 @@ export function registerTeamRoutes(
           }
         }
 
+        // Hanya anggap grup selesai jika SEMUA match di grup tersebut sudah COMPLETED
+        const allCompleted = grpMatches.length > 0 && grpMatches.every((m) => m.status === 'COMPLETED')
+
         const sorted = Array.from(teamStats.values()).sort((a, b) => {
           if (b.points !== a.points) return b.points - a.points
           return b.diff - a.diff
@@ -1452,6 +1455,7 @@ export function registerTeamRoutes(
           groupWinners.push({
             groupId: grp.id,
             groupName: grp.name,
+            isCompleted: allCompleted,
             teamId: sorted[0].team.id,
             teamCode: sorted[0].team.code,
             teamName: sorted[0].team.name,

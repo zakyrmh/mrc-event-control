@@ -26,6 +26,11 @@ export interface TournamentBracketProps {
   categoryCode: string
   categoryLabel: string
   matches: BracketMatch[]
+  groupWinners?: Array<{
+    groupName: string
+    teamName: string
+    teamCode: string
+  }>
   onSelectMatch?: (matchId: string, matchVersion: number) => void
   readOnly?: boolean
 }
@@ -34,6 +39,7 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
   categoryCode,
   categoryLabel,
   matches,
+  groupWinners = [],
   onSelectMatch,
   readOnly = false,
 }) => {
@@ -46,7 +52,23 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
     return matches.find((m) => m.slotId === slotId)
   }
 
-  const renderCard = (slotId: string, defaultTitle: string, defaultSourceA = '', defaultSourceB = '') => {
+  // Cari juara grup untuk slot pembuka jika match belum ter-generate
+  const getWinnerOfGroup = (groupLetter: string) => {
+    const upper = groupLetter.toUpperCase()
+    return groupWinners.find((w) => {
+      const cleaned = w.groupName.replace(/^(GROUP|GRUP)\s*/i, '').trim().toUpperCase()
+      return cleaned === upper
+    })
+  }
+
+  const renderCard = (
+    slotId: string,
+    defaultTitle: string,
+    defaultSourceA = '',
+    defaultSourceB = '',
+    expectedGroupA = '',
+    expectedGroupB = '',
+  ) => {
     const m = getMatchBySlot(slotId)
     const teamA = m?.teamA
     const teamB = m?.teamB
@@ -54,27 +76,45 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
     const isDone = m?.status === 'COMPLETED'
     const canSelect = !readOnly && m && m.status === 'SCHEDULED' && teamA && teamB && onSelectMatch
 
+    // Jika match gugur belum dibuat tapi grupnya sudah punya pemenang klasemen
+    const previewA = !teamA && expectedGroupA ? getWinnerOfGroup(expectedGroupA) : null
+    const previewB = !teamB && expectedGroupB ? getWinnerOfGroup(expectedGroupB) : null
+
     return (
       <div className={`bracket-match-card ${isLive ? 'is-live' : isDone ? 'is-completed' : ''}`}>
         <div className="bracket-match-header">
           <span>{m?.sequence ? `Match #${m.sequence}` : defaultTitle}</span>
           <span style={{ fontSize: '10px' }}>
-            {isLive ? '🔴 LIVE' : isDone ? '✓ SELESAI' : 'TERJADWAL'}
+            {isLive ? '🔴 LIVE' : isDone ? '✓ SELESAI' : m ? 'TERJADWAL' : 'BELUM DIMUAT'}
           </span>
         </div>
 
         {/* Tim A */}
         <div className={`bracket-team-row ${teamA?.isWinner ? 'winner' : ''}`}>
-          <span className="bracket-team-name" title={teamA?.name ?? defaultSourceA}>
-            {teamA?.name || <em style={{ color: 'var(--color-stone)' }}>{defaultSourceA || 'TBD'}</em>}
+          <span className="bracket-team-name" title={teamA?.name ?? previewA?.teamName ?? defaultSourceA}>
+            {teamA?.name || previewA ? (
+              <span>
+                {teamA?.name ?? previewA?.teamName}{' '}
+                {previewA && <small style={{ color: '#0369a1', fontSize: '10px' }}>({defaultSourceA})</small>}
+              </span>
+            ) : (
+              <em style={{ color: 'var(--color-stone)' }}>{defaultSourceA || 'TBD'}</em>
+            )}
           </span>
           <span className="bracket-team-score">{teamA?.score ?? '-'}</span>
         </div>
 
         {/* Tim B */}
         <div className={`bracket-team-row ${teamB?.isWinner ? 'winner' : ''}`}>
-          <span className="bracket-team-name" title={teamB?.name ?? defaultSourceB}>
-            {teamB?.name || <em style={{ color: 'var(--color-stone)' }}>{defaultSourceB || 'TBD'}</em>}
+          <span className="bracket-team-name" title={teamB?.name ?? previewB?.teamName ?? defaultSourceB}>
+            {teamB?.name || previewB ? (
+              <span>
+                {teamB?.name ?? previewB?.teamName}{' '}
+                {previewB && <small style={{ color: '#0369a1', fontSize: '10px' }}>({defaultSourceB})</small>}
+              </span>
+            ) : (
+              <em style={{ color: 'var(--color-stone)' }}>{defaultSourceB || 'TBD'}</em>
+            )}
           </span>
           <span className="bracket-team-score">{teamB?.score ?? '-'}</span>
         </div>
@@ -302,29 +342,29 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
 
       <div className="bracket-scroll-wrapper">
         <div className="bracket-tree">
-          {/* Babak 1: Babak Awal */}
-          <div className="bracket-round">
-            <div className="bracket-round-title">Babak Awal (Ronde 1)</div>
-            {renderCard('R1_1', 'Match 1', 'Juara Grup A', 'Juara Grup B')}
-            {renderCard('R1_2', 'Match 2', 'Juara Grup C', 'Juara Grup D')}
-            {renderCard('R1_3', 'Match 3', 'Juara Grup E', 'Juara Grup F')}
-            {renderCard('R1_4', 'Match 4', 'Juara Grup G', 'Juara Grup H')}
-            {renderCard('R1_5', 'Match 5', 'Juara Grup I', 'Juara Grup J')}
+            {/* Babak 1: Babak Awal */}
+            <div className="bracket-round">
+              <div className="bracket-round-title">Babak Awal (Ronde 1)</div>
+              {renderCard('R1_1', 'Match 1', 'Juara Grup A', 'Juara Grup B', 'A', 'B')}
+              {renderCard('R1_2', 'Match 2', 'Juara Grup C', 'Juara Grup D', 'C', 'D')}
+              {renderCard('R1_3', 'Match 3', 'Juara Grup E', 'Juara Grup F', 'E', 'F')}
+              {renderCard('R1_4', 'Match 4', 'Juara Grup G', 'Juara Grup H', 'G', 'H')}
+              {renderCard('R1_5', 'Match 5', 'Juara Grup I', 'Juara Grup J', 'I', 'J')}
 
-            {/* Match 6: Kualifikasi Segitiga K, L, M */}
-            <div className="bracket-round-group-box">
-              <div className="bracket-group-box-header">
-                <strong>Match 6 (Segitiga K, L, M)</strong>
-                <span className="badge-warning">Top 1 Lanjut</span>
-              </div>
-              {renderCard('R1_6A', 'Match 6A', 'Juara Grup K', 'Juara Grup L')}
-              {renderCard('R1_6B', 'Match 6B', 'Juara Grup K', 'Juara Grup M')}
-              {renderCard('R1_6C', 'Match 6C', 'Juara Grup L', 'Juara Grup M')}
-              <div style={{ fontSize: '11px', color: 'var(--color-stone)', textAlign: 'center', padding: '2px 0' }}>
-                Peringkat 1 lolos ke Babak 2 • Peringkat 2 & 3 gugur
+              {/* Match 6: Kualifikasi Segitiga K, L, M */}
+              <div className="bracket-round-group-box">
+                <div className="bracket-group-box-header">
+                  <strong>Match 6 (Segitiga K, L, M)</strong>
+                  <span className="badge-warning">Top 1 Lanjut</span>
+                </div>
+                {renderCard('R1_6A', 'Match 6A', 'Juara Grup K', 'Juara Grup L', 'K', 'L')}
+                {renderCard('R1_6B', 'Match 6B', 'Juara Grup K', 'Juara Grup M', 'K', 'M')}
+                {renderCard('R1_6C', 'Match 6C', 'Juara Grup L', 'Juara Grup M', 'L', 'M')}
+                <div style={{ fontSize: '11px', color: 'var(--color-stone)', textAlign: 'center', padding: '2px 0' }}>
+                  Peringkat 1 lolos ke Babak 2 • Peringkat 2 & 3 gugur
+                </div>
               </div>
             </div>
-          </div>
 
           {/* Babak 2: Perempat Final (Menuju 3 Besar) */}
           <div className="bracket-round">

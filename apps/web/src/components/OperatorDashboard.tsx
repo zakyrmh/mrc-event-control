@@ -405,6 +405,49 @@ export function OperatorDashboard() {
     )
   }, [completedMatches, selectedGroup])
 
+  // Hitung juara seluruh grup secara live di Operator Dashboard
+  const operatorGroupWinners = useMemo(() => {
+    const groupStats = new Map<string, { groupName: string; teams: Map<string, { name: string; code: string; pts: number; diff: number }> }>()
+    for (const m of completedMatches) {
+      if (!m.group?.id || !m.group?.name) continue
+      if (!groupStats.has(m.group.id)) {
+        groupStats.set(m.group.id, { groupName: m.group.name, teams: new Map() })
+      }
+      const grp = groupStats.get(m.group.id)!
+      if (!grp.teams.has(m.teamA.id)) grp.teams.set(m.teamA.id, { name: m.teamA.name, code: m.teamA.code, pts: 0, diff: 0 })
+      if (!grp.teams.has(m.teamB.id)) grp.teams.set(m.teamB.id, { name: m.teamB.name, code: m.teamB.code, pts: 0, diff: 0 })
+
+      const res = m.results?.find((r) => r.status === 'FINAL') ?? m.results?.[0]
+      if (res) {
+        const pA = res.pointsA ?? res.finalGoalsA ?? 0
+        const pB = res.pointsB ?? res.finalGoalsB ?? 0
+        const tA = grp.teams.get(m.teamA.id)!
+        const tB = grp.teams.get(m.teamB.id)!
+        tA.diff += (pA - pB)
+        tB.diff += (pB - pA)
+        if (res.winnerTeamId === m.teamA.id) tA.pts += 3
+        else if (res.winnerTeamId === m.teamB.id) tB.pts += 3
+        else if (pA === pB) {
+          tA.pts += 1
+          tB.pts += 1
+        }
+      }
+    }
+
+    const winners: Array<{ groupName: string; teamName: string; teamCode: string }> = []
+    for (const [, val] of groupStats.entries()) {
+      const sorted = Array.from(val.teams.values()).sort((a, b) => b.pts - a.pts || b.diff - a.diff)
+      if (sorted.length > 0) {
+        winners.push({
+          groupName: val.groupName,
+          teamName: sorted[0].name,
+          teamCode: sorted[0].code,
+        })
+      }
+    }
+    return winners
+  }, [completedMatches])
+
   // Poll Broadcast Telemetry every 1.5 seconds
   useEffect(() => {
     const fetchTelemetry = async () => {
@@ -839,6 +882,7 @@ export function OperatorDashboard() {
                 'Robot Soccer'
               }
               matches={operatorBracketMatches}
+              groupWinners={operatorGroupWinners}
               onSelectMatch={handleSelectMatch}
             />
           ) : (
