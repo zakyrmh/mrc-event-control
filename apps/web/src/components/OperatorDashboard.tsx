@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { OverlayDisplay } from './OverlayDisplay'
 import { PhaseStepper } from './PhaseStepper'
 import { ConfirmModal } from './ConfirmModal'
+import { TournamentBracket, type BracketMatch } from './TournamentBracket'
 import { formatPhase, formatStatus, formatTime } from '../constants/ui-labels'
 import './OperatorDashboard.css'
 
@@ -155,6 +156,9 @@ interface ScheduledMatch {
   sequence: number
   matchVersion: number
   status: string
+  stage?: string
+  stageLabel?: string | null
+  bracketSlot?: string | null
   categoryId?: string
   category?: { id: string; code: string; label: string }
   group?: { id: string; name: string } | null
@@ -174,11 +178,8 @@ interface ScheduledMatch {
 }
 
 const ARENAS = [
-  { id: 'arena-1', label: 'Meja 1 (arena-1)' },
-  { id: 'arena-2', label: 'Meja 2 (arena-2)' },
-  { id: 'arena-3', label: 'Meja 3 (arena-3)' },
-  { id: 'arena-4', label: 'Meja 4 (arena-4)' },
-  { id: 'main', label: 'Arena Utama (main)' },
+  { id: 'arena-1', label: 'Meja 1 (Arena 1)' },
+  { id: 'arena-2', label: 'Meja 2 (Arena 2)' },
 ]
 
 export function OperatorDashboard() {
@@ -188,6 +189,7 @@ export function OperatorDashboard() {
   const [selectedCategory, setSelectedCategory] = useState<string>(() => {
     return localStorage.getItem('mrc_operator_category') || 'all'
   })
+  const [operatorViewMode, setOperatorViewMode] = useState<'schedule' | 'bracket'>('schedule')
   const [categories, setCategories] = useState<CategoryOption[]>([])
   const [completedMatches, setCompletedMatches] = useState<ScheduledMatch[]>([])
   const [selectedGroup, setSelectedGroup] = useState<string>('all')
@@ -245,6 +247,80 @@ export function OperatorDashboard() {
     lastAckReceivedAt: null,
     renderLatencyMs: null,
   })
+
+  // Filter jadwal per arena berdasarkan grup (Soccer & Sumo terbagi 2 arena)
+  const isMatchInArena = useCallback(
+    (m: ScheduledMatch, arenaId: string) => {
+      const catCode = (m.category?.code ?? '').toLowerCase()
+      // Line follower dan kategori tanpa grup tidak dipartisi grup
+      if (!catCode.includes('soccer') && !catCode.includes('sumo')) {
+        return true
+      }
+      const grp = (m.group?.name ?? '').trim()
+      // Ambil huruf penanda grup (misal: "Group A" -> "A", "Grup B" -> "B")
+      const clean = grp.replace(/^(GROUP|GRUP)\s*/i, '').trim().toUpperCase()
+      const matchLetter = clean.charAt(0) || 'A'
+
+      if (catCode.includes('soccer')) {
+        // Soccer 11 grup (A-K): Arena 1 = A..F, Arena 2 = G..K
+        const isArena1 = matchLetter <= 'F'
+        return arenaId === 'arena-1' ? isArena1 : !isArena1
+      }
+      if (catCode.includes('sumo')) {
+        // Sumo 10 grup (A-J): Arena 1 = A..E, Arena 2 = F..J
+        const isArena1 = matchLetter <= 'E'
+        return arenaId === 'arena-1' ? isArena1 : !isArena1
+      }
+      return true
+    },
+    [],
+  )
+
+  const [showAllGroups, setShowAllGroups] = useState<boolean>(false)
+
+  const arenaScheduledMatches = useMemo(() => {
+    if (showAllGroups) return scheduledMatches
+    return scheduledMatches.filter((m) => isMatchInArena(m, selectedArena))
+  }, [scheduledMatches, selectedArena, showAllGroups, isMatchInArena])
+
+  const operatorBracketMatches = useMemo((): BracketMatch[] => {
+    return scheduledMatches
+      .filter((m) => {
+        if (selectedCategory !== 'all' && m.categoryId && m.categoryId !== selectedCategory) {
+          return false
+        }
+        return Boolean(m.bracketSlot || (m.stage && m.stage !== 'GROUP'))
+      })
+      .map((m) => {
+        const finalRes = m.results?.find((r) => r.status === 'FINAL')
+        return {
+          id: m.id,
+          slotId: m.bracketSlot || '',
+          label: m.stageLabel || `Match #${m.sequence}`,
+          sequence: m.sequence,
+          matchVersion: m.matchVersion,
+          status: m.status as any,
+          teamA: m.teamA
+            ? {
+                id: m.teamA.id,
+                name: m.teamA.name,
+                code: m.teamA.code,
+                score: finalRes?.pointsA ?? finalRes?.finalGoalsA ?? null,
+                isWinner: finalRes?.winnerTeamId === m.teamA.id,
+              }
+            : null,
+          teamB: m.teamB
+            ? {
+                id: m.teamB.id,
+                name: m.teamB.name,
+                code: m.teamB.code,
+                score: finalRes?.pointsB ?? finalRes?.finalGoalsB ?? null,
+                isWinner: finalRes?.winnerTeamId === m.teamB.id,
+              }
+            : null,
+        }
+      })
+  }, [scheduledMatches, selectedCategory])
 
   // Group filter & standings calculation for completed matches
   const availableGroups = useMemo(() => {
@@ -731,15 +807,50 @@ export function OperatorDashboard() {
       )}
 
       {!activeMatch ? (
-        <div className="card">
-          <h2>
-            <span>Status Meja: Siap Digunakan</span>
-            <span className="status-pill info">
-              {ARENAS.find((a) => a.id === selectedArena)?.label ?? selectedArena}
-            </span>
-          </h2>
+        <div>
+          {/* Tab Selector: Jadwal Antrean vs Bagan Bracket */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '1.25rem' }}>
+            <button
+              type="button"
+              className={`btn ${operatorViewMode === 'schedule' ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ padding: '8px 16px', fontSize: '13px', fontWeight: 600 }}
+              onClick={() => setOperatorViewMode('schedule')}
+            >
+              📋 Daftar Antrean Jadwal
+            </button>
+            <button
+              type="button"
+              className={`btn ${operatorViewMode === 'bracket' ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ padding: '8px 16px', fontSize: '13px', fontWeight: 600 }}
+              onClick={() => setOperatorViewMode('bracket')}
+            >
+              🏆 Bagan Sistem Gugur (Bracket)
+            </button>
+          </div>
 
-          {scheduledMatches.length > 0 && (
+          {operatorViewMode === 'bracket' ? (
+            <TournamentBracket
+              categoryCode={
+                categories.find((c) => c.id === selectedCategory)?.code ||
+                (selectedCategory !== 'all' ? selectedCategory : 'soccer')
+              }
+              categoryLabel={
+                categories.find((c) => c.id === selectedCategory)?.label ||
+                'Robot Soccer'
+              }
+              matches={operatorBracketMatches}
+              onSelectMatch={handleSelectMatch}
+            />
+          ) : (
+            <div className="card">
+              <h2>
+                <span>Status Meja: Siap Digunakan</span>
+                <span className="status-pill info">
+                  {ARENAS.find((a) => a.id === selectedArena)?.label ?? selectedArena}
+                </span>
+              </h2>
+
+          {arenaScheduledMatches.length > 0 && (
             <div
               style={{
                 backgroundColor: 'var(--color-primary-tint)',
@@ -764,35 +875,45 @@ export function OperatorDashboard() {
                     letterSpacing: '0.05em',
                   }}
                 >
-                  Pertandingan Berikutnya di Antrean
+                  Pertandingan Berikutnya di Meja Ini
                 </span>
                 <div style={{ fontSize: '18px', fontWeight: 700, marginTop: '2px' }}>
-                  Match #{scheduledMatches[0].sequence}: {scheduledMatches[0].teamA.name} vs{' '}
-                  {scheduledMatches[0].teamB.name}
+                  Match #{arenaScheduledMatches[0].sequence}: {arenaScheduledMatches[0].teamA.name} vs{' '}
+                  {arenaScheduledMatches[0].teamB.name}
                 </div>
                 <div style={{ fontSize: '13px', color: 'var(--color-graphite)', marginTop: '4px' }}>
-                  {scheduledMatches[0].category?.label}{' '}
-                  {scheduledMatches[0].group ? `• Grup ${scheduledMatches[0].group.name}` : ''}
+                  {arenaScheduledMatches[0].category?.label}{' '}
+                  {arenaScheduledMatches[0].group ? `• Grup ${arenaScheduledMatches[0].group.name}` : ''}
                 </div>
               </div>
               <button
                 className="btn btn-primary"
                 style={{ padding: '8px 20px', fontSize: '14px', fontWeight: 600 }}
                 onClick={() =>
-                  handleSelectMatch(scheduledMatches[0].id, scheduledMatches[0].matchVersion)
+                  handleSelectMatch(arenaScheduledMatches[0].id, arenaScheduledMatches[0].matchVersion)
                 }
               >
-                Mulai Match #{scheduledMatches[0].sequence} &rarr;
+                Mulai Match #{arenaScheduledMatches[0].sequence} &rarr;
               </button>
             </div>
           )}
 
-          <h3 style={{ fontSize: '15px', fontWeight: 600, marginTop: '1rem', marginBottom: '0.5rem' }}>
-            Jadwal Pertandingan Belum Dimulai ({scheduledMatches.length})
-          </h3>
-          {scheduledMatches.length === 0 ? (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginTop: '1rem', marginBottom: '0.5rem' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 600, margin: 0 }}>
+              Jadwal Pertandingan ({arenaScheduledMatches.length})
+            </h3>
+            <label style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: 'var(--color-stone)' }}>
+              <input
+                type="checkbox"
+                checked={showAllGroups}
+                onChange={(e) => setShowAllGroups(e.target.checked)}
+              />
+              Tampilkan semua grup (gabungan meja 1 & 2)
+            </label>
+          </div>
+          {arenaScheduledMatches.length === 0 ? (
             <p style={{ color: 'var(--color-stone)', fontSize: '14px', marginBottom: '1.5rem' }}>
-              Tidak ada pertandingan dengan status SCHEDULED untuk filter kategori ini.
+              Tidak ada pertandingan dengan status SCHEDULED untuk filter meja/kategori ini.
             </p>
           ) : (
             <div style={{ overflowX: 'auto', marginBottom: '1.5rem' }}>
@@ -808,7 +929,7 @@ export function OperatorDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {scheduledMatches.map((m) => (
+                  {arenaScheduledMatches.map((m) => (
                     <tr key={m.id}>
                       <td className="tabular-nums" style={{ fontWeight: 600 }}>#{m.sequence}</td>
                       <td>
@@ -834,7 +955,9 @@ export function OperatorDashboard() {
             </div>
           )}
         </div>
-      ) : (
+      )}
+    </div>
+  ) : (
         <div className="dashboard-grid">
           {/* Main Controls Panel */}
           <div>

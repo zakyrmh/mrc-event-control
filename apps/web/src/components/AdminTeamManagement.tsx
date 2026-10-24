@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState, useMemo } from 'react'
 import { MatchSchedulePanel } from './MatchSchedulePanel'
+import { TournamentBracket, type BracketMatch } from './TournamentBracket'
 import './AdminTeamManagement.css'
 
 export interface Category {
@@ -45,10 +46,22 @@ export interface Match {
   tieId: string | null
   rondeNumber: number | null
   generationBatchId: string | null
+  bracketSlot?: string | null
   category?: { code: string; label: string }
   group?: { name: string }
-  teamA?: { code: string; name: string }
-  teamB?: { code: string; name: string }
+  teamA?: { id?: string; code: string; name: string }
+  teamB?: { id?: string; code: string; name: string }
+  results?: Array<{
+    revision: number
+    status: string
+    decisionText: string | null
+    winnerTeamId: string | null
+    finalGoalsA: number | null
+    finalGoalsB: number | null
+    pointsA: number | null
+    pointsB: number | null
+    refereeReference: string | null
+  }>
 }
 
 interface ImportPreviewResult {
@@ -102,11 +115,12 @@ async function parseResponseError(res: Response, fallback: string): Promise<stri
 }
 
 export function AdminTeamManagement() {
-  const [activeTab, setActiveTab] = useState<'categories' | 'teams' | 'import' | 'matches'>('teams')
+  const [activeTab, setActiveTab] = useState<'categories' | 'teams' | 'import' | 'matches' | 'bracket'>('teams')
   const [categories, setCategories] = useState<Category[]>([])
   const [groups, setGroups] = useState<CompetitionGroup[]>([])
   const [teams, setTeams] = useState<Team[]>([])
   const [matches, setMatches] = useState<Match[]>([])
+  const [bracketCategory, setBracketCategory] = useState<string>('')
 
   const [loading, setLoading] = useState<boolean>(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -598,6 +612,49 @@ export function AdminTeamManagement() {
     ? teams.filter((t) => t.categoryId === matchCategory && t.archivedAt === null)
     : []
 
+  const currentAdminBracketCategory = useMemo(() => {
+    return categories.find((c) => c.id === bracketCategory) || categories[0] || null
+  }, [categories, bracketCategory])
+
+  const adminBracketMatches = useMemo((): BracketMatch[] => {
+    if (!currentAdminBracketCategory) return []
+    return matches
+      .filter(
+        (m) =>
+          m.categoryId === currentAdminBracketCategory.id &&
+          (m.bracketSlot || (m.stage && m.stage !== 'GROUP')),
+      )
+      .map((m) => {
+        const finalRes = m.results?.find((r) => r.status === 'FINAL')
+        return {
+          id: m.id,
+          slotId: m.bracketSlot || '',
+          label: m.stageLabel || `Match #${m.sequence}`,
+          sequence: m.sequence,
+          matchVersion: m.matchVersion,
+          status: m.status as any,
+          teamA: m.teamA
+            ? {
+                id: m.teamAId,
+                name: m.teamA.name,
+                code: m.teamA.code,
+                score: finalRes?.pointsA ?? finalRes?.finalGoalsA ?? null,
+                isWinner: finalRes?.winnerTeamId === m.teamAId,
+              }
+            : null,
+          teamB: m.teamB
+            ? {
+                id: m.teamBId,
+                name: m.teamB.name,
+                code: m.teamB.code,
+                score: finalRes?.pointsB ?? finalRes?.finalGoalsB ?? null,
+                isWinner: finalRes?.winnerTeamId === m.teamBId,
+              }
+            : null,
+        }
+      })
+  }, [matches, currentAdminBracketCategory])
+
   return (
     <div className="admin-container">
       <header className="admin-header">
@@ -674,6 +731,13 @@ export function AdminTeamManagement() {
           onClick={() => setActiveTab('matches')}
         >
           Jadwal Pertandingan
+        </button>
+        <button
+          type="button"
+          className={`admin-tab ${activeTab === 'bracket' ? 'active' : ''}`}
+          onClick={() => setActiveTab('bracket')}
+        >
+          Bagan Bracket (Gugur)
         </button>
       </nav>
 
@@ -1249,6 +1313,52 @@ export function AdminTeamManagement() {
             </details>
           </section>
         </>
+      )}
+
+      {/* TAB: BRACKET */}
+      {activeTab === 'bracket' && !loading && (
+        <section className="section-panel">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div>
+              <h2 style={{ margin: 0 }}>Visualisasi Bagan Sistem Gugur</h2>
+              <p style={{ margin: '4px 0 0', color: 'var(--color-stone)', fontSize: '13px' }}>
+                Bagan turnamen otomatis mengikuti struktur bagan resmi (LF Junior 8 tim, Sumo 10 tim, Soccer 11 tim, LF Umum 13 tim).
+              </p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <label htmlFor="bracket-cat-select" style={{ fontSize: '13px', fontWeight: 600 }}>Pilih Kategori:</label>
+              <select
+                id="bracket-cat-select"
+                value={currentAdminBracketCategory?.id || ''}
+                onChange={(e) => setBracketCategory(e.target.value)}
+                style={{ padding: '6px 12px', borderRadius: '6px', border: '1px solid var(--color-border)', fontSize: '13px' }}
+              >
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.label} ({c.code})</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => void loadData()}
+                style={{ fontSize: '12px' }}
+              >
+                🔄 Refresh Bagan
+              </button>
+            </div>
+          </div>
+
+          {currentAdminBracketCategory ? (
+            <TournamentBracket
+              categoryCode={currentAdminBracketCategory.code}
+              categoryLabel={currentAdminBracketCategory.label}
+              matches={adminBracketMatches}
+              readOnly={true}
+            />
+          ) : (
+            <div className="state-box empty">Belum ada kategori yang aktif.</div>
+          )}
+        </section>
       )}
     </div>
   )

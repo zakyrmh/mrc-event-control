@@ -1,0 +1,157 @@
+.bracket-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  margin-bottom: 1.5rem;
+}
+
+.bracket-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 1rem;
+}
+
+.bracket-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-ink);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bracket-scroll-wrapper {
+  overflow-x: auto;
+  padding: 1rem 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.bracket-tree {
+  display: flex;
+  align-items: stretch;
+  gap: 3rem;
+  min-width: max-content;
+  padding: 0 1rem;
+}
+
+.bracket-round {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  min-width: 260px;
+  max-width: 280px;
+  gap: 1.5rem;
+}
+
+.bracket-round-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-graphite);
+  text-align: center;
+  margin-bottom: 0.5rem;
+  padding-bottom: 4px;
+  border-bottom: 2px solid var(--color-border);
+}
+
+.bracket-match-card {
+  background-color: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+  transition: border-color var(--duration-base) ease;
+}
+
+.bracket-match-card:hover {
+  border-color: var(--color-primary);
+}
+
+.bracket-match-card.is-live {
+  border-color: #0284c7;
+  background-color: #f0f9ff;
+}
+
+.bracket-match-card.is-completed {
+  border-color: #cbd5e1;
+}
+
+.bracket-match-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-stone);
+}
+
+.bracket-team-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  background-color: #f8fafc;
+}
+
+.bracket-team-row.winner {
+  background-color: #e6f3fe;
+  font-weight: 700;
+  color: #0369a1;
+}
+
+.bracket-team-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 170px;
+}
+
+.bracket-team-score {
+  font-family: var(--font-mono, monospace);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin-left: 8px;
+}
+
+.bracket-special-slot {
+  border: 1px dashed #0284c7;
+  background-color: #f0f9ff;
+  border-radius: var(--radius-md);
+  padding: 12px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0369a1;
+}
+
+.bracket-winner-podium {
+  border: 2px solid #eab308;
+  background-color: #fefce8;
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  text-align: center;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.bracket-winner-podium .trophy {
+  font-size: 28px;
+}
