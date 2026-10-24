@@ -30,6 +30,7 @@ export interface ObsStatusSummary {
 export class BroadcastService {
   public readonly projection: ProjectionService
   public readonly runtimeId: string
+  private readonly timerService?: TimerService
   private overlayNs?: Namespace
   private heartbeatInterval?: NodeJS.Timeout
   private latestObsTelemetry: (ObsTelemetryInput & { receivedAt: Date }) | null = null
@@ -37,6 +38,7 @@ export class BroadcastService {
 
   constructor(options: BroadcastServiceOptions) {
     this.runtimeId = options.runtimeId ?? 'runtime-default'
+    this.timerService = options.timerService
     this.projection = new ProjectionService({
       client: options.client,
       timerService: options.timerService,

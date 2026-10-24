@@ -332,7 +332,7 @@ export function registerMatchRoutes(
   )
 
   // --- MATCH COMMANDS ---
-  server.post(
+  server.post<{ Params: { id: string } }>(
     '/api/v1/matches/:id/commands',
     {
       config: { auth: { roles: ['OPERATOR', 'SUPER_ADMIN'] } },
@@ -346,7 +346,7 @@ export function registerMatchRoutes(
         }
       },
     },
-    async (request: FastifyRequest<{ Params: { id: string } }>, reply) => {
+    async (request, reply) => {
       const matchId = request.params.id
       const body = request.body as Record<string, unknown> | null
       const action = body?.action as string

@@ -1408,6 +1408,7 @@ export function registerTeamRoutes(
       const groupWinners: Array<{
         groupId: string
         groupName: string
+        isCompleted: boolean
         teamId: string
         teamCode: string
         teamName: string
@@ -1451,16 +1452,17 @@ export function registerTeamRoutes(
           return b.diff - a.diff
         })
 
-        if (sorted.length > 0 && sorted[0].team) {
+        const top = sorted[0]
+        if (top && top.team) {
           groupWinners.push({
             groupId: grp.id,
             groupName: grp.name,
             isCompleted: allCompleted,
-            teamId: sorted[0].team.id,
-            teamCode: sorted[0].team.code,
-            teamName: sorted[0].team.name,
-            points: sorted[0].points,
-            diff: sorted[0].diff,
+            teamId: top.team.id,
+            teamCode: top.team.code,
+            teamName: top.team.name,
+            points: top.points,
+            diff: top.diff,
           })
         }
       }
