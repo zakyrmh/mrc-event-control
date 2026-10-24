@@ -297,57 +297,68 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
         <h3 className="bracket-title">
           <span>🏆 Bagan Sistem Gugur: {categoryLabel}</span>
         </h3>
-        <span className="status-pill info">13 Juara Grup (A s/d M)</span>
+        <span className="status-pill info">13 Juara Grup (A s/d M) • Segitiga K-L-M</span>
       </div>
 
       <div className="bracket-scroll-wrapper">
         <div className="bracket-tree">
-          {/* Babak 1 */}
+          {/* Babak 1: Babak Awal */}
           <div className="bracket-round">
-            <div className="bracket-round-title">Babak Awal</div>
+            <div className="bracket-round-title">Babak Awal (Ronde 1)</div>
             {renderCard('R1_1', 'Match 1', 'Juara Grup A', 'Juara Grup B')}
             {renderCard('R1_2', 'Match 2', 'Juara Grup C', 'Juara Grup D')}
             {renderCard('R1_3', 'Match 3', 'Juara Grup E', 'Juara Grup F')}
             {renderCard('R1_4', 'Match 4', 'Juara Grup G', 'Juara Grup H')}
             {renderCard('R1_5', 'Match 5', 'Juara Grup I', 'Juara Grup J')}
-            {renderCard('R1_6', 'Kualifikasi Bawah', 'Juara Grup K', 'Juara Grup L')}
-            <div className="bracket-special-slot">
-              <span>Juara Grup M (Menunggu Pemenang Kualifikasi)</span>
+
+            {/* Match 6: Kualifikasi Segitiga K, L, M */}
+            <div className="bracket-round-group-box">
+              <div className="bracket-group-box-header">
+                <strong>Match 6 (Segitiga K, L, M)</strong>
+                <span className="badge-warning">Top 1 Lanjut</span>
+              </div>
+              {renderCard('R1_6A', 'Match 6A', 'Juara Grup K', 'Juara Grup L')}
+              {renderCard('R1_6B', 'Match 6B', 'Juara Grup K', 'Juara Grup M')}
+              {renderCard('R1_6C', 'Match 6C', 'Juara Grup L', 'Juara Grup M')}
+              <div style={{ fontSize: '11px', color: 'var(--color-stone)', textAlign: 'center', padding: '2px 0' }}>
+                Peringkat 1 lolos ke Babak 2 • Peringkat 2 & 3 gugur
+              </div>
             </div>
           </div>
 
-          {/* Babak 2: Perempat Final */}
+          {/* Babak 2: Perempat Final (Menuju 3 Besar) */}
           <div className="bracket-round">
-            <div className="bracket-round-title">Perempat Final</div>
-            {renderCard('QF1', 'Perempat Final 1', 'Pemenang Match 1', 'Pemenang Match 2')}
-            {renderCard('QF2', 'Perempat Final 2', 'Pemenang Match 3', 'Pemenang Match 4')}
-            {renderCard('QF3', 'Perempat Final 3', 'Pemenang Match 5', 'Pemenang Kualifikasi/M')}
+            <div className="bracket-round-title">Babak 2 (Menuju 3 Besar)</div>
+            {renderCard('QF1', 'Babak 2 - Blok Atas', 'Pemenang Match 1', 'Pemenang Match 2')}
+            {renderCard('QF2', 'Babak 2 - Blok Tengah', 'Pemenang Match 3', 'Pemenang Match 4')}
+            {renderCard('QF3', 'Babak 2 - Blok Bawah', 'Pemenang Match 5', 'Top 1 Segitiga (K-L-M)')}
           </div>
 
-          {/* Babak 3: Semi Final */}
+          {/* Babak 3: Babak Final 3 Besar (Sesuai Diagram Resmi) */}
           <div className="bracket-round">
-            <div className="bracket-round-title">Semi Final</div>
-            {renderCard('SF1', 'Semi Final 1', 'Pemenang QF 1', 'Pemenang QF 2')}
-            {renderCard('SF2', 'Semi Final 2', 'Pemenang QF 3', 'Pemenang Kualifikasi')}
+            <div className="bracket-round-title">Babak Final (3 Besar)</div>
+            <div className="bracket-round-group-box" style={{ backgroundColor: '#fff', border: '2px solid #eab308' }}>
+              <div className="bracket-group-box-header" style={{ paddingBottom: '6px', borderBottom: '1px solid #fef08a' }}>
+                <strong style={{ color: '#854d0e', fontSize: '12px' }}>Perebutan Juara 1, 2, & 3</strong>
+                <span className="badge-warning">3 Finalis</span>
+              </div>
+              {renderCard('FINAL_1', 'Final Match 1', 'Pemenang Blok Atas', 'Pemenang Blok Tengah')}
+              {renderCard('FINAL_2', 'Final Match 2', 'Pemenang Blok Atas', 'Pemenang Blok Bawah')}
+              {renderCard('FINAL_3', 'Final Match 3', 'Pemenang Blok Tengah', 'Pemenang Blok Bawah')}
+            </div>
           </div>
 
-          {/* Babak 4: Final & Juara 3 */}
-          <div className="bracket-round">
-            <div className="bracket-round-title">Grand Final & Juara 3</div>
-            {renderCard('FINAL', 'Grand Final', 'Pemenang SF 1', 'Pemenang SF 2')}
-            {renderCard('BRONZE', 'Perebutan Juara 3', 'Kalah SF 1', 'Kalah SF 2')}
-          </div>
-
-          {/* Podium */}
+          {/* Podium Juara 1 (WINNER 1st) */}
           <div className="bracket-round" style={{ justifyContent: 'center' }}>
             <div className="bracket-winner-podium">
               <span className="trophy">🏆</span>
-              <strong style={{ fontSize: '14px', color: '#854d0e' }}>WINNER LF UMUM</strong>
-              <span style={{ fontSize: '13px', fontWeight: 600 }}>
-                {getMatchBySlot('FINAL')?.teamA?.isWinner
-                  ? getMatchBySlot('FINAL')?.teamA?.name
-                  : getMatchBySlot('FINAL')?.teamB?.isWinner
-                    ? getMatchBySlot('FINAL')?.teamB?.name
+              <strong style={{ fontSize: '14px', color: '#854d0e' }}>WINNER 1st</strong>
+              <span style={{ fontSize: '11px', color: '#a16207' }}>Line Follower Umum</span>
+              <span style={{ fontSize: '13px', fontWeight: 700, marginTop: '4px' }}>
+                {getMatchBySlot('FINAL_1')?.teamA?.isWinner
+                  ? getMatchBySlot('FINAL_1')?.teamA?.name
+                  : getMatchBySlot('FINAL_1')?.teamB?.isWinner
+                    ? getMatchBySlot('FINAL_1')?.teamB?.name
                     : '-'}
               </span>
             </div>
