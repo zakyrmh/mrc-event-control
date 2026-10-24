@@ -60,6 +60,7 @@ export const matchScheduleInputSchema = z
     /** Defaults to the group stage when omitted, preserving the manual form. */
     stage: z.enum(['GROUP', 'KNOCKOUT', 'FINAL']).optional(),
     stageLabel: nullableOptionalString(120),
+    bracketSlot: nullableOptionalString(64),
     scheduledAt: utcDateTimeSchema.nullable().optional(),
     sequence: z.int().positive(),
     teamAId: idSchema,

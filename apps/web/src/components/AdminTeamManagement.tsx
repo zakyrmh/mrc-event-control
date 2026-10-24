@@ -121,6 +121,22 @@ export function AdminTeamManagement() {
   const [teams, setTeams] = useState<Team[]>([])
   const [matches, setMatches] = useState<Match[]>([])
   const [bracketCategory, setBracketCategory] = useState<string>('')
+  const [seedPreview, setSeedPreview] = useState<{
+    categoryId: string
+    categoryCode: string
+    categoryLabel: string
+    groupWinners: Array<{
+      groupId: string
+      groupName: string
+      teamId: string
+      teamCode: string
+      teamName: string
+      points: number
+      diff: number
+    }>
+  } | null>(null)
+  const [seedLoading, setSeedLoading] = useState(false)
+  const [seedNotice, setSeedNotice] = useState<string | null>(null)
 
   const [loading, setLoading] = useState<boolean>(true)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -601,6 +617,166 @@ export function AdminTeamManagement() {
       loadData()
     } catch (err: unknown) {
       setErrorMessage(err instanceof Error ? err.message : 'Error')
+    }
+  }
+
+  // Bracket Semi-Automatic Seed Handlers
+  const handleFetchSeedPreview = async () => {
+    if (!currentAdminBracketCategory) return
+    setSeedLoading(true)
+    setSeedNotice(null)
+    setErrorMessage(null)
+    try {
+      const res = await fetch(`/api/v1/categories/${currentAdminBracketCategory.id}/bracket-seed-preview`, {
+        credentials: 'include',
+      })
+      if (!res.ok) throw new Error(await parseResponseError(res, 'Gagal mengambil data juara grup'))
+      const data = await res.json()
+      setSeedPreview(data)
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'Error preview seed')
+    } finally {
+      setSeedLoading(false)
+    }
+  }
+
+  const handleCommitSeed = async () => {
+    if (!seedPreview || !currentAdminBracketCategory) return
+    setSeedLoading(true)
+    setSeedNotice(null)
+    setErrorMessage(null)
+
+    // Petakan juara grup ke slot pertandingan babak gugur berdasarkan kode kategori
+    const winners = seedPreview.groupWinners
+    const findWinner = (groupLetter: string) => {
+      const upper = groupLetter.toUpperCase()
+      return winners.find((w) => {
+        const cleaned = w.groupName.replace(/^(GROUP|GRUP)\s*/i, '').trim().toUpperCase()
+        return cleaned === upper
+      })
+    }
+
+    const catCode = currentAdminBracketCategory.code.toLowerCase()
+    const matchesToCommit: Array<{
+      slotId: string
+      stageLabel: string
+      teamAId: string
+      teamBId: string
+    }> = []
+
+    if (catCode.includes('junior')) {
+      // 8 Tim: A vs B, C vs D, E vs F, G vs H
+      const pairs = [
+        { slot: 'QF1', label: 'Perempat Final 1', a: 'A', b: 'B' },
+        { slot: 'QF2', label: 'Perempat Final 2', a: 'C', b: 'D' },
+        { slot: 'QF3', label: 'Perempat Final 3', a: 'E', b: 'F' },
+        { slot: 'QF4', label: 'Perempat Final 4', a: 'G', b: 'H' },
+      ]
+      for (const p of pairs) {
+        const tA = findWinner(p.a)
+        const tB = findWinner(p.b)
+        if (tA && tB && tA.teamId !== tB.teamId) {
+          matchesToCommit.push({
+            slotId: p.slot,
+            stageLabel: p.label,
+            teamAId: tA.teamId,
+            teamBId: tB.teamId,
+          })
+        }
+      }
+    } else if (catCode.includes('soccer')) {
+      // Soccer: A-B, C-D, E-F, G-H, I-J
+      const pairs = [
+        { slot: 'R1_AB', label: 'Babak Gugur 1 (Match 1)', a: 'A', b: 'B' },
+        { slot: 'R1_CD', label: 'Babak Gugur 1 (Match 2)', a: 'C', b: 'D' },
+        { slot: 'R1_EF', label: 'Babak Gugur 1 (Match 3)', a: 'E', b: 'F' },
+        { slot: 'R1_GH', label: 'Babak Gugur 1 (Match 4)', a: 'G', b: 'H' },
+        { slot: 'R1_IJ', label: 'Babak Gugur 1 (Match 5)', a: 'I', b: 'J' },
+      ]
+      for (const p of pairs) {
+        const tA = findWinner(p.a)
+        const tB = findWinner(p.b)
+        if (tA && tB && tA.teamId !== tB.teamId) {
+          matchesToCommit.push({
+            slotId: p.slot,
+            stageLabel: p.label,
+            teamAId: tA.teamId,
+            teamBId: tB.teamId,
+          })
+        }
+      }
+    } else if (catCode.includes('sumo')) {
+      // Sumo: A-B, C-D, E-F, G-H, I-J
+      const pairs = [
+        { slot: 'R1_AB', label: 'Babak 1 (Match 1)', a: 'A', b: 'B' },
+        { slot: 'R1_CD', label: 'Babak 1 (Match 2)', a: 'C', b: 'D' },
+        { slot: 'R1_EF', label: 'Babak 1 (Match 3)', a: 'E', b: 'F' },
+        { slot: 'R1_GH', label: 'Babak 1 (Match 4)', a: 'G', b: 'H' },
+        { slot: 'R1_IJ', label: 'Babak 1 (Match 5)', a: 'I', b: 'J' },
+      ]
+      for (const p of pairs) {
+        const tA = findWinner(p.a)
+        const tB = findWinner(p.b)
+        if (tA && tB && tA.teamId !== tB.teamId) {
+          matchesToCommit.push({
+            slotId: p.slot,
+            stageLabel: p.label,
+            teamAId: tA.teamId,
+            teamBId: tB.teamId,
+          })
+        }
+      }
+    } else {
+      // LF Umum: 13 Tim (A-J di match 1-5, K-L-M di Match 6A/6B/6C)
+      const pairs = [
+        { slot: 'R1_1', label: 'Babak Awal (Match 1)', a: 'A', b: 'B' },
+        { slot: 'R1_2', label: 'Babak Awal (Match 2)', a: 'C', b: 'D' },
+        { slot: 'R1_3', label: 'Babak Awal (Match 3)', a: 'E', b: 'F' },
+        { slot: 'R1_4', label: 'Babak Awal (Match 4)', a: 'G', b: 'H' },
+        { slot: 'R1_5', label: 'Babak Awal (Match 5)', a: 'I', b: 'J' },
+        { slot: 'R1_6A', label: 'Match 6A (K vs L)', a: 'K', b: 'L' },
+        { slot: 'R1_6B', label: 'Match 6B (K vs M)', a: 'K', b: 'M' },
+        { slot: 'R1_6C', label: 'Match 6C (L vs M)', a: 'L', b: 'M' },
+      ]
+      for (const p of pairs) {
+        const tA = findWinner(p.a)
+        const tB = findWinner(p.b)
+        if (tA && tB && tA.teamId !== tB.teamId) {
+          matchesToCommit.push({
+            slotId: p.slot,
+            stageLabel: p.label,
+            teamAId: tA.teamId,
+            teamBId: tB.teamId,
+          })
+        }
+      }
+    }
+
+    if (matchesToCommit.length === 0) {
+      setErrorMessage('Belum ada pasangan juara grup yang lengkap untuk digenerate ke bagan.')
+      setSeedLoading(false)
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/v1/categories/${currentAdminBracketCategory.id}/bracket-seed-commit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken,
+        },
+        credentials: 'include',
+        body: JSON.stringify({ matches: matchesToCommit }),
+      })
+      if (!res.ok) throw new Error(await parseResponseError(res, 'Gagal menerapkan bracket'))
+      const result = await res.json()
+      setSeedNotice(`Berhasil menerapkan ${result.count} pertandingan babak gugur ke bagan!`)
+      setSeedPreview(null)
+      await loadData()
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'Error commit seed')
+    } finally {
+      setSeedLoading(false)
     }
   }
 
@@ -1345,8 +1521,79 @@ export function AdminTeamManagement() {
               >
                 🔄 Refresh Bagan
               </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleFetchSeedPreview}
+                disabled={seedLoading}
+                style={{ fontSize: '12px', fontWeight: 600 }}
+              >
+                ⚡ {seedLoading ? 'Memeriksa...' : 'Muat Juara Grup Otomatis'}
+              </button>
             </div>
           </div>
+
+          {seedNotice && (
+            <div className="state-box success" role="status" style={{ marginBottom: '1rem' }}>
+              <strong>Sukses:</strong> {seedNotice}
+            </div>
+          )}
+
+          {seedPreview && (
+            <div
+              style={{
+                backgroundColor: '#ffffff',
+                border: '2px solid var(--color-primary)',
+                borderRadius: '8px',
+                padding: '16px',
+                marginBottom: '1.5rem',
+              }}
+            >
+              <h3 style={{ margin: '0 0 8px 0', fontSize: '15px' }}>
+                Preview Penempatan Juara Grup ({seedPreview.categoryLabel})
+              </h3>
+              <p style={{ fontSize: '13px', color: 'var(--color-stone)', margin: '0 0 12px 0' }}>
+                Ditemukan {seedPreview.groupWinners.length} juara grup. Tinjau tim sebelum diterapkan ke bagan sistem gugur:
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '8px', marginBottom: '14px' }}>
+                {seedPreview.groupWinners.map((w) => (
+                  <div
+                    key={w.groupId}
+                    style={{
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '6px',
+                      padding: '8px 10px',
+                      background: '#f8fafc',
+                      fontSize: '12px',
+                    }}
+                  >
+                    <strong>Grup {w.groupName}:</strong>
+                    <div style={{ fontWeight: 600, color: 'var(--color-ink)' }}>{w.teamName} ({w.teamCode})</div>
+                    <div style={{ color: 'var(--color-stone)', fontSize: '11px' }}>{w.points} Poin • Selisih {w.diff > 0 ? `+${w.diff}` : w.diff}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleCommitSeed}
+                  disabled={seedLoading}
+                  style={{ fontSize: '13px', fontWeight: 600 }}
+                >
+                  ✓ Terapkan ke Bagan Sistem Gugur
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => setSeedPreview(null)}
+                  style={{ fontSize: '13px' }}
+                >
+                  Batal
+                </button>
+              </div>
+            </div>
+          )}
 
           {currentAdminBracketCategory ? (
             <TournamentBracket

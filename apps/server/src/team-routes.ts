@@ -1213,6 +1213,7 @@ export function registerTeamRoutes(
             groupId: parsed.data.groupId ?? null,
             stage: parsed.data.stage ?? 'GROUP',
             stageLabel: parsed.data.stageLabel ?? null,
+            bracketSlot: parsed.data.bracketSlot ?? null,
             scheduledAt: parsed.data.scheduledAt
               ? new Date(parsed.data.scheduledAt)
               : null,
@@ -1374,6 +1375,196 @@ export function registerTeamRoutes(
         return match
       })
       return reply.send(updated)
+    },
+  )
+
+  // --- BRACKET SEED PREVIEW & COMMIT (SEMI-AUTOMATIC) ---
+  server.get<{ Params: { categoryId: string } }>(
+    '/api/v1/categories/:categoryId/bracket-seed-preview',
+    { config: { auth: { roles: ['OPERATOR', 'SUPER_ADMIN'] } } },
+    async (request, reply) => {
+      const { categoryId } = request.params
+      const category = await client.category.findUnique({
+        where: { id: categoryId },
+        include: { groups: { orderBy: { name: 'asc' } } },
+      })
+      if (!category) {
+        return errorResponse(reply, 404, 'NOT_FOUND', 'Kategori tidak ditemukan.', request.id)
+      }
+
+      // Ambil seluruh match grup pada kategori ini beserta hasil FINAL-nya
+      const matches = await client.match.findMany({
+        where: { categoryId, stage: 'GROUP' },
+        include: {
+          group: true,
+          teamA: true,
+          teamB: true,
+          results: { where: { status: 'FINAL' } },
+        },
+        orderBy: { sequence: 'asc' },
+      })
+
+      // Hitung klasemen per grup
+      const groupWinners: Array<{
+        groupId: string
+        groupName: string
+        teamId: string
+        teamCode: string
+        teamName: string
+        points: number
+        diff: number
+      }> = []
+
+      for (const grp of category.groups) {
+        const grpMatches = matches.filter((m) => m.groupId === grp.id)
+        if (grpMatches.length === 0) continue
+
+        const teamStats = new Map<string, { team: any; points: number; diff: number }>()
+        for (const m of grpMatches) {
+          if (!teamStats.has(m.teamAId)) teamStats.set(m.teamAId, { team: m.teamA, points: 0, diff: 0 })
+          if (!teamStats.has(m.teamBId)) teamStats.set(m.teamBId, { team: m.teamB, points: 0, diff: 0 })
+
+          const res = m.results[0]
+          if (res) {
+            const pA = res.pointsA ?? res.finalGoalsA ?? 0
+            const pB = res.pointsB ?? res.finalGoalsB ?? 0
+            const statA = teamStats.get(m.teamAId)!
+            const statB = teamStats.get(m.teamBId)!
+            statA.diff += (pA - pB)
+            statB.diff += (pB - pA)
+            if (res.winnerTeamId === m.teamAId) {
+              statA.points += 3
+            } else if (res.winnerTeamId === m.teamBId) {
+              statB.points += 3
+            } else if (pA === pB) {
+              statA.points += 1
+              statB.points += 1
+            }
+          }
+        }
+
+        const sorted = Array.from(teamStats.values()).sort((a, b) => {
+          if (b.points !== a.points) return b.points - a.points
+          return b.diff - a.diff
+        })
+
+        if (sorted.length > 0 && sorted[0].team) {
+          groupWinners.push({
+            groupId: grp.id,
+            groupName: grp.name,
+            teamId: sorted[0].team.id,
+            teamCode: sorted[0].team.code,
+            teamName: sorted[0].team.name,
+            points: sorted[0].points,
+            diff: sorted[0].diff,
+          })
+        }
+      }
+
+      return reply.send({
+        categoryId: category.id,
+        categoryCode: category.code,
+        categoryLabel: category.label,
+        groupWinners,
+      })
+    },
+  )
+
+  server.post<{
+    Params: { categoryId: string }
+    Body: {
+      matches: Array<{
+        slotId: string
+        stageLabel: string
+        teamAId: string
+        teamBId: string
+      }>
+    }
+  }>(
+    '/api/v1/categories/:categoryId/bracket-seed-commit',
+    { config: { auth: { roles: ['SUPER_ADMIN'] } } },
+    async (request, reply) => {
+      const { categoryId } = request.params
+      const { matches: bracketMatches } = request.body || { matches: [] }
+
+      if (!bracketMatches || !Array.isArray(bracketMatches) || bracketMatches.length === 0) {
+        return errorResponse(reply, 400, 'INVALID_INPUT', 'Daftar pertandingan bracket wajib diisi.', request.id)
+      }
+
+      const category = await client.category.findUnique({ where: { id: categoryId } })
+      if (!category) {
+        return errorResponse(reply, 404, 'NOT_FOUND', 'Kategori tidak ditemukan.', request.id)
+      }
+
+      // Ambil nomor urut sequence terakhir di kategori ini
+      const maxSeq = await client.match.aggregate({
+        where: { categoryId },
+        _max: { sequence: true },
+      })
+      let nextSequence = (maxSeq._max.sequence ?? 0) + 1
+
+      const actorId = request.authPrincipal?.userId ?? null
+
+      const createdMatches = await client.$transaction(async (tx) => {
+        const results = []
+        for (const bm of bracketMatches) {
+          if (bm.teamAId === bm.teamBId) continue
+
+          // Periksa apakah slot ini sudah pernah dibuat sebelumnya
+          const existingSlot = await tx.match.findFirst({
+            where: { categoryId, bracketSlot: bm.slotId },
+          })
+
+          if (existingSlot) {
+            // Update jika belum mulai
+            if (!existingSlot.hasStarted && existingSlot.status === 'SCHEDULED') {
+              const updated = await tx.match.update({
+                where: { id: existingSlot.id },
+                data: {
+                  teamAId: bm.teamAId,
+                  teamBId: bm.teamBId,
+                  stageLabel: bm.stageLabel,
+                  matchVersion: { increment: 1 },
+                },
+              })
+              results.push(updated)
+            }
+          } else {
+            const newMatch = await tx.match.create({
+              data: {
+                id: randomUUID(),
+                categoryId,
+                stage: 'KNOCKOUT',
+                stageLabel: bm.stageLabel,
+                bracketSlot: bm.slotId,
+                sequence: nextSequence++,
+                teamAId: bm.teamAId,
+                teamBId: bm.teamBId,
+                status: 'SCHEDULED',
+                matchVersion: 1,
+                hasStarted: false,
+              },
+            })
+            results.push(newMatch)
+          }
+        }
+
+        await tx.auditEntry.create({
+          data: {
+            id: randomUUID(),
+            action: 'match.bracket_seed',
+            actorId,
+            resourceType: 'Category',
+            resourceId: categoryId,
+            beforeJson: null,
+            afterJson: JSON.stringify({ count: results.length }),
+          },
+        })
+
+        return results
+      })
+
+      return reply.send({ success: true, count: createdMatches.length, matches: createdMatches })
     },
   )
 }
