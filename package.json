@@ -7,9 +7,11 @@
     "test": "pnpm --filter shared test && pnpm --filter server test",
     "setup": "pnpm install && node scripts/ensure-env.mjs && pnpm --filter server prisma:generate && pnpm --filter server prisma:migrate:deploy",
     "dev": "pnpm -r --parallel --filter server --filter web run dev",
+    "build": "pnpm --filter server build && pnpm --filter web build",
     "start": "node scripts/start-production.mjs",
     "db:migrate": "pnpm --filter server prisma:migrate:deploy",
     "db:admin": "pnpm --filter server bootstrap:admin",
+    "user:create": "pnpm --filter server create:user",
     "verify": "pnpm --filter server typecheck && pnpm --filter server test && pnpm --filter server build && pnpm --filter web lint && pnpm --filter web build"
   },
   "keywords": [],

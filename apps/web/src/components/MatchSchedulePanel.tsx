@@ -433,7 +433,14 @@ export function MatchSchedulePanel({
           <select
             id="sched-cat"
             value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
+            onChange={(e) => {
+              const nextId = e.target.value
+              setCategoryId(nextId)
+              const selectedCat = categories.find((c) => c.id === nextId)
+              if (selectedCat && selectedCat.code.toLowerCase().includes('sumo')) {
+                setRondeCount('3')
+              }
+            }}
           >
             <option value="">Pilih Kategori</option>
             {categories.map((c) => (
@@ -456,7 +463,7 @@ export function MatchSchedulePanel({
         </div>
 
         <div className="form-field">
-          <label htmlFor="sched-ronde">Ronde per Tie (wajib)</label>
+          <label htmlFor="sched-ronde">Ronde per Pertemuan (Tie)</label>
           <input
             id="sched-ronde"
             type="number"
@@ -467,7 +474,9 @@ export function MatchSchedulePanel({
             placeholder="Belum ditetapkan panitia"
           />
           <span className="schedule-field-note">
-            Tidak ada nilai bawaan. Isi sesuai keputusan panitia.
+            {categories.find((c) => c.id === categoryId)?.code.toLowerCase().includes('sumo')
+              ? 'Sumobot: 3 kali main / ronde per pertemuan grup (2 menit/ronde).'
+              : 'Tidak ada nilai bawaan. Isi sesuai keputusan panitia (mis. 3 untuk Sumobot).'}
           </span>
         </div>
 

@@ -8,6 +8,7 @@
     "build": "pnpm prisma:generate && tsc -p tsconfig.build.json",
     "start": "node --env-file-if-exists=.env dist/index.js",
     "bootstrap:admin": "tsx --env-file-if-exists=.env src/bootstrap-admin.ts",
+    "create:user": "tsx --env-file-if-exists=.env src/create-user.ts",
     "test": "pnpm prisma:generate && node --import tsx --test test/*.test.ts",
     "typecheck": "pnpm prisma:generate && tsc --noEmit",
     "prisma:generate": "prisma generate --config prisma.config.ts",

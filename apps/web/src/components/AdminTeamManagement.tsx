@@ -660,96 +660,53 @@ export function AdminTeamManagement() {
     const matchesToCommit: Array<{
       slotId: string
       stageLabel: string
-      teamAId: string
-      teamBId: string
+      teamAId?: string
+      teamBId?: string
     }> = []
+
+    const addPair = (slot: string, label: string, letterA: string, letterB: string) => {
+      const tA = findWinner(letterA)
+      const tB = findWinner(letterB)
+      if (tA || tB) {
+        matchesToCommit.push({
+          slotId: slot,
+          stageLabel: label,
+          teamAId: tA?.teamId,
+          teamBId: tB?.teamId,
+        })
+      }
+    }
 
     if (catCode.includes('junior')) {
       // 8 Tim: A vs B, C vs D, E vs F, G vs H
-      const pairs = [
-        { slot: 'QF1', label: 'Perempat Final 1', a: 'A', b: 'B' },
-        { slot: 'QF2', label: 'Perempat Final 2', a: 'C', b: 'D' },
-        { slot: 'QF3', label: 'Perempat Final 3', a: 'E', b: 'F' },
-        { slot: 'QF4', label: 'Perempat Final 4', a: 'G', b: 'H' },
-      ]
-      for (const p of pairs) {
-        const tA = findWinner(p.a)
-        const tB = findWinner(p.b)
-        if (tA && tB && tA.teamId !== tB.teamId) {
-          matchesToCommit.push({
-            slotId: p.slot,
-            stageLabel: p.label,
-            teamAId: tA.teamId,
-            teamBId: tB.teamId,
-          })
-        }
-      }
+      addPair('QF1', 'Perempat Final 1', 'A', 'B')
+      addPair('QF2', 'Perempat Final 2', 'C', 'D')
+      addPair('QF3', 'Perempat Final 3', 'E', 'F')
+      addPair('QF4', 'Perempat Final 4', 'G', 'H')
     } else if (catCode.includes('soccer')) {
       // Soccer: A-B, C-D, E-F, G-H, I-J
-      const pairs = [
-        { slot: 'R1_AB', label: 'Babak Gugur 1 (Match 1)', a: 'A', b: 'B' },
-        { slot: 'R1_CD', label: 'Babak Gugur 1 (Match 2)', a: 'C', b: 'D' },
-        { slot: 'R1_EF', label: 'Babak Gugur 1 (Match 3)', a: 'E', b: 'F' },
-        { slot: 'R1_GH', label: 'Babak Gugur 1 (Match 4)', a: 'G', b: 'H' },
-        { slot: 'R1_IJ', label: 'Babak Gugur 1 (Match 5)', a: 'I', b: 'J' },
-      ]
-      for (const p of pairs) {
-        const tA = findWinner(p.a)
-        const tB = findWinner(p.b)
-        if (tA && tB && tA.teamId !== tB.teamId) {
-          matchesToCommit.push({
-            slotId: p.slot,
-            stageLabel: p.label,
-            teamAId: tA.teamId,
-            teamBId: tB.teamId,
-          })
-        }
-      }
+      addPair('R1_AB', 'Babak 1 (Match 1)', 'A', 'B')
+      addPair('R1_CD', 'Babak 1 (Match 2)', 'C', 'D')
+      addPair('R1_EF', 'Babak 1 (Match 3)', 'E', 'F')
+      addPair('R1_GH', 'Babak 1 (Match 4)', 'G', 'H')
+      addPair('R1_IJ', 'Babak 1 (Match 5)', 'I', 'J')
     } else if (catCode.includes('sumo')) {
       // Sumo: A-B, C-D, E-F, G-H, I-J
-      const pairs = [
-        { slot: 'R1_AB', label: 'Babak 1 (Match 1)', a: 'A', b: 'B' },
-        { slot: 'R1_CD', label: 'Babak 1 (Match 2)', a: 'C', b: 'D' },
-        { slot: 'R1_EF', label: 'Babak 1 (Match 3)', a: 'E', b: 'F' },
-        { slot: 'R1_GH', label: 'Babak 1 (Match 4)', a: 'G', b: 'H' },
-        { slot: 'R1_IJ', label: 'Babak 1 (Match 5)', a: 'I', b: 'J' },
-      ]
-      for (const p of pairs) {
-        const tA = findWinner(p.a)
-        const tB = findWinner(p.b)
-        if (tA && tB && tA.teamId !== tB.teamId) {
-          matchesToCommit.push({
-            slotId: p.slot,
-            stageLabel: p.label,
-            teamAId: tA.teamId,
-            teamBId: tB.teamId,
-          })
-        }
-      }
+      addPair('R1_AB', 'Babak 1 (Match 1)', 'A', 'B')
+      addPair('R1_CD', 'Babak 1 (Match 2)', 'C', 'D')
+      addPair('R1_EF', 'Babak 1 (Match 3)', 'E', 'F')
+      addPair('R1_GH', 'Babak 1 (Match 4)', 'G', 'H')
+      addPair('R1_IJ', 'Babak 1 (Match 5)', 'I', 'J')
     } else {
       // LF Umum: 13 Tim (A-J di match 1-5, K-L-M di Match 6A/6B/6C)
-      const pairs = [
-        { slot: 'R1_1', label: 'Babak Awal (Match 1)', a: 'A', b: 'B' },
-        { slot: 'R1_2', label: 'Babak Awal (Match 2)', a: 'C', b: 'D' },
-        { slot: 'R1_3', label: 'Babak Awal (Match 3)', a: 'E', b: 'F' },
-        { slot: 'R1_4', label: 'Babak Awal (Match 4)', a: 'G', b: 'H' },
-        { slot: 'R1_5', label: 'Babak Awal (Match 5)', a: 'I', b: 'J' },
-        { slot: 'R1_6A', label: 'Match 6A (K vs L)', a: 'K', b: 'L' },
-        { slot: 'R1_6B', label: 'Match 6B (K vs M)', a: 'K', b: 'M' },
-        { slot: 'R1_6C', label: 'Match 6C (L vs M)', a: 'L', b: 'M' },
-      ]
-      for (const p of pairs) {
-        const tA = findWinner(p.a)
-        const tB = findWinner(p.b)
-        if (tA && tB && tA.teamId !== tB.teamId) {
-          matchesToCommit.push({
-            slotId: p.slot,
-            stageLabel: p.label,
-            teamAId: tA.teamId,
-            teamBId: tB.teamId,
-          })
-        }
-      }
+      addPair('R1_1', 'Babak Awal (Match 1)', 'A', 'B')
+      addPair('R1_2', 'Babak Awal (Match 2)', 'C', 'D')
+      addPair('R1_3', 'Babak Awal (Match 3)', 'E', 'F')
+      addPair('R1_4', 'Babak Awal (Match 4)', 'G', 'H')
+      addPair('R1_5', 'Babak Awal (Match 5)', 'I', 'J')
+      addPair('R1_6A', 'Match 6A (K vs L)', 'K', 'L')
+      addPair('R1_6B', 'Match 6B (K vs M)', 'K', 'M')
+      addPair('R1_6C', 'Match 6C (L vs M)', 'L', 'M')
     }
 
     if (matchesToCommit.length === 0) {

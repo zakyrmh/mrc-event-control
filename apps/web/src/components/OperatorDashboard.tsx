@@ -3,6 +3,7 @@ import { OverlayDisplay } from './OverlayDisplay'
 import { PhaseStepper } from './PhaseStepper'
 import { ConfirmModal } from './ConfirmModal'
 import { TournamentBracket, type BracketMatch } from './TournamentBracket'
+import { showsStandaloneNextRoundPreparation } from './operator-dashboard-controls'
 import { formatPhase, formatStatus, formatTime } from '../constants/ui-labels'
 import './OperatorDashboard.css'
 
@@ -208,6 +209,7 @@ export function OperatorDashboard() {
   // Live Timer from Overlay websocket/interpolator
   const [matchTimerMs, setMatchTimerMs] = useState<number>(0)
   const [, setMatchTimerState] = useState<string>('IDLE')
+  const [lastConsumedGoalIntentId, setLastConsumedGoalIntentId] = useState<string | null>(null)
 
   // Confirm Modal state for risky actions
   const [confirmModal, setConfirmModal] = useState<{
@@ -251,6 +253,10 @@ export function OperatorDashboard() {
   // Filter jadwal per arena berdasarkan grup (Soccer & Sumo terbagi 2 arena)
   const isMatchInArena = useCallback(
     (m: ScheduledMatch, arenaId: string) => {
+      // Pertandingan babak gugur/final dapat dimainkan di arena mana pun
+      if (m.stage && m.stage !== 'GROUP') {
+        return true
+      }
       const catCode = (m.category?.code ?? '').toLowerCase()
       // Line follower dan kategori tanpa grup tidak dipartisi grup
       if (!catCode.includes('soccer') && !catCode.includes('sumo')) {
@@ -284,7 +290,9 @@ export function OperatorDashboard() {
   }, [scheduledMatches, selectedArena, showAllGroups, isMatchInArena])
 
   const operatorBracketMatches = useMemo((): BracketMatch[] => {
-    return scheduledMatches
+    // Gabungkan jadwal dan hasil selesai agar match yang telah tuntas tetap tampil di bagan
+    const allMatches = [...scheduledMatches, ...completedMatches]
+    return allMatches
       .filter((m) => {
         if (selectedCategory !== 'all' && m.categoryId && m.categoryId !== selectedCategory) {
           return false
@@ -320,7 +328,7 @@ export function OperatorDashboard() {
             : null,
         }
       })
-  }, [scheduledMatches, selectedCategory])
+  }, [scheduledMatches, completedMatches, selectedCategory])
 
   // Group filter & standings calculation for completed matches
   const availableGroups = useMemo(() => {
@@ -1199,8 +1207,8 @@ export function OperatorDashboard() {
                 </div>
               )}
 
-              {/* Next ronde (Sumo up to 3, Soccer 2) */}
-              {(activeMatch.phase === 'READY' || activeMatch.phase === 'INTERMISSION') &&
+              {/* Next ronde preparation if needed */}
+              {showsStandaloneNextRoundPreparation(activeMatch.phase) &&
                 activeMatch.segments.length > 0 &&
                 !activeMatch.segments.some((s) => s.status === 'PREPARED') && (
                   <div className="controls-row">
@@ -1208,14 +1216,14 @@ export function OperatorDashboard() {
                       className="btn btn-primary"
                       title="segment.prepare"
                       onClick={() =>
-                        sendMatchCommand('segment.prepare', {
+                        void sendMatchCommand('segment.prepare', {
                           kind: 'ROUND',
-                          ordinal: activeMatch.segments.length + 1,
+                          ordinal: (activeMatch.segments.reduce((max, s) => Math.max(max, s.ordinal), 0)) + 1,
                           durationMs: segmentDurationMs,
                         })
                       }
                     >
-                      Siapkan Ronde {activeMatch.segments.length + 1}
+                      Siapkan Ronde {(activeMatch.segments.reduce((max, s) => Math.max(max, s.ordinal), 0)) + 1}
                     </button>
                   </div>
                 )}
@@ -1230,7 +1238,7 @@ export function OperatorDashboard() {
                       style={{ padding: '10px 20px', fontSize: '14px', fontWeight: 600 }}
                       onClick={handleArmStart}
                     >
-                      Siap Mulai (Aktifkan Pengaman)
+                      Siap Mulai Ronde {activeMatch.segments.find((s) => s.status === 'PREPARED')?.ordinal ?? activeMatch.segments.length} (Aktifkan Pengaman)
                     </button>
                   ) : (
                     <>
@@ -1255,23 +1263,23 @@ export function OperatorDashboard() {
                 </div>
               )}
 
-              {/* In-progress controls: Jeda dominant, Result separated by >= 16px */}
-              {activeMatch.status === 'IN_PROGRESS' && (
+              {/* In-progress controls (COMPETITION): Jeda dominant, Result separated by >= 16px */}
+              {activeMatch.status === 'IN_PROGRESS' && activeMatch.phase === 'COMPETITION' && (
                 <div className="controls-row" style={{ alignItems: 'center' }}>
                   <button
                     className="btn btn-warning"
                     title="match.pause"
                     style={{ padding: '12px 24px', fontSize: '15px', fontWeight: 700, minWidth: '130px' }}
-                    onClick={() => sendMatchCommand('match.pause', {})}
+                    onClick={() => void sendMatchCommand('match.pause', {})}
                   >
                     ⏸ Jeda
                   </button>
                   <button
                     className="btn btn-ghost"
                     title="INTERMISSION"
-                    onClick={() => sendMatchCommand('phase.advance', { targetPhase: 'INTERMISSION' })}
+                    onClick={() => void sendMatchCommand('phase.advance', { targetPhase: 'INTERMISSION' })}
                   >
-                    Istirahat Antar-Ronde
+                    Selesai Ronde & Istirahat Antar-Ronde
                   </button>
                   <button
                     className="btn btn-outline"
@@ -1281,6 +1289,50 @@ export function OperatorDashboard() {
                   >
                     Masuk Fase Keputusan
                   </button>
+                </div>
+              )}
+
+              {/* Intermission controls: Istirahat Antar-Ronde */}
+              {activeMatch.phase === 'INTERMISSION' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div className="alert alert-info" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span>☕ Pertandingan sedang dalam <strong>Istirahat Antar-Ronde (Intermission)</strong>.</span>
+                  </div>
+                  <div className="controls-row" style={{ alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+                    {activeMatch.segments.some((s) => s.status === 'PREPARED') ? (
+                      <button
+                        className="btn btn-primary"
+                        title="phase.advance READY"
+                        style={{ padding: '10px 20px', fontSize: '14px', fontWeight: 600 }}
+                        onClick={() => void sendMatchCommand('phase.advance', { targetPhase: 'READY' })}
+                      >
+                        Lanjut ke Ronde {activeMatch.segments.find((s) => s.status === 'PREPARED')?.ordinal ?? 2} (Masuk Siap Pertandingan) &rarr;
+                      </button>
+                    ) : (
+                      <button
+                        className="btn btn-primary"
+                        title="segment.prepare"
+                        style={{ padding: '10px 20px', fontSize: '14px', fontWeight: 600 }}
+                        onClick={() =>
+                          void sendMatchCommand('segment.prepare', {
+                            kind: 'ROUND',
+                            ordinal: (activeMatch.segments.reduce((max, s) => Math.max(max, s.ordinal), 0)) + 1,
+                            durationMs: segmentDurationMs,
+                          })
+                        }
+                      >
+                        Siapkan Ronde {(activeMatch.segments.reduce((max, s) => Math.max(max, s.ordinal), 0)) + 1}
+                      </button>
+                    )}
+                    <button
+                      className="btn btn-outline"
+                      title="RESULT"
+                      style={{ marginLeft: '16px', borderColor: '#cbd5e1' }}
+                      onClick={handleAdvanceToResult}
+                    >
+                      Masuk Fase Keputusan (Akhiri Pertandingan)
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -1325,24 +1377,28 @@ export function OperatorDashboard() {
                   <button
                     className="btn btn-ghost"
                     disabled={!activeGoalIntent}
-                    onClick={() =>
-                      sendMatchCommand('goal.add', {
-                        goalIntentId: activeGoalIntent?.id,
+                    onClick={() => {
+                      if (!activeGoalIntent) return
+                      setLastConsumedGoalIntentId(activeGoalIntent.id)
+                      void sendMatchCommand('goal.add', {
+                        goalIntentId: activeGoalIntent.id,
                         side: 'A',
                       })
-                    }
+                    }}
                   >
                     +1 Gol Tim A ({activeMatch.teamA.name})
                   </button>
                   <button
                     className="btn btn-ghost"
                     disabled={!activeGoalIntent}
-                    onClick={() =>
-                      sendMatchCommand('goal.add', {
-                        goalIntentId: activeGoalIntent?.id,
+                    onClick={() => {
+                      if (!activeGoalIntent) return
+                      setLastConsumedGoalIntentId(activeGoalIntent.id)
+                      void sendMatchCommand('goal.add', {
+                        goalIntentId: activeGoalIntent.id,
                         side: 'B',
                       })
-                    }
+                    }}
                   >
                     +1 Gol Tim B ({activeMatch.teamB.name})
                   </button>
@@ -1351,8 +1407,8 @@ export function OperatorDashboard() {
                       className="btn btn-outline"
                       title="goal.prepare-next"
                       onClick={() =>
-                        sendMatchCommand('goal.prepare-next', {
-                          previousGoalIntentId: 'last-consumed-id',
+                        void sendMatchCommand('goal.prepare-next', {
+                          previousGoalIntentId: lastConsumedGoalIntentId || 'last-consumed-id',
                         })
                       }
                     >

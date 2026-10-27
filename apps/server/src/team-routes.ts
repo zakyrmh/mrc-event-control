@@ -1433,9 +1433,10 @@ export function registerTeamRoutes(
             const statB = teamStats.get(m.teamBId)!
             statA.diff += (pA - pB)
             statB.diff += (pB - pA)
-            if (res.winnerTeamId === m.teamAId) {
+            const winId = res.winnerTeamId || (pA > pB ? m.teamAId : pB > pA ? m.teamBId : null)
+            if (winId === m.teamAId) {
               statA.points += 3
-            } else if (res.winnerTeamId === m.teamBId) {
+            } else if (winId === m.teamBId) {
               statB.points += 3
             } else if (pA === pB) {
               statA.points += 1
@@ -1482,8 +1483,8 @@ export function registerTeamRoutes(
       matches: Array<{
         slotId: string
         stageLabel: string
-        teamAId: string
-        teamBId: string
+        teamAId?: string
+        teamBId?: string
       }>
     }
   }>(
@@ -1524,18 +1525,24 @@ export function registerTeamRoutes(
           if (existingSlot) {
             // Update jika belum mulai
             if (!existingSlot.hasStarted && existingSlot.status === 'SCHEDULED') {
+              const dataToUpdate: Record<string, any> = {
+                stageLabel: bm.stageLabel,
+                matchVersion: { increment: 1 },
+              }
+              if (bm.teamAId && bm.teamAId !== existingSlot.teamBId) {
+                dataToUpdate.teamAId = bm.teamAId
+              }
+              if (bm.teamBId && bm.teamBId !== existingSlot.teamAId) {
+                dataToUpdate.teamBId = bm.teamBId
+              }
+
               const updated = await tx.match.update({
                 where: { id: existingSlot.id },
-                data: {
-                  teamAId: bm.teamAId,
-                  teamBId: bm.teamBId,
-                  stageLabel: bm.stageLabel,
-                  matchVersion: { increment: 1 },
-                },
+                data: dataToUpdate,
               })
               results.push(updated)
             }
-          } else {
+          } else if (bm.teamAId && bm.teamBId && bm.teamAId !== bm.teamBId) {
             const newMatch = await tx.match.create({
               data: {
                 id: randomUUID(),

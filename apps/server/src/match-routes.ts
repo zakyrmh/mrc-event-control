@@ -52,6 +52,389 @@ async function calculateMatchScore(client: Prisma.TransactionClient | PrismaClie
   return { goalsA: Math.max(0, goalsA), goalsB: Math.max(0, goalsB) }
 }
 
+async function autoSyncGroupWinnerToBracket(client: PrismaClient, categoryId: string) {
+  try {
+    const category = await client.category.findUnique({
+      where: { id: categoryId },
+      include: { groups: true },
+    })
+    if (!category) return
+    const catCode = category.code.toLowerCase()
+
+    const matches = await client.match.findMany({
+      where: { categoryId, stage: 'GROUP' },
+      include: {
+        teamA: true,
+        teamB: true,
+        results: { where: { status: 'FINAL' } },
+      },
+    })
+
+    const groupWinners = new Map<string, any>()
+    for (const grp of category.groups) {
+      const grpMatches = matches.filter((m) => m.groupId === grp.id)
+      if (grpMatches.length === 0 || !grpMatches.every((m) => m.status === 'COMPLETED')) continue
+
+      const teamStats = new Map<string, { team: any; points: number; diff: number }>()
+      for (const m of grpMatches) {
+        if (!teamStats.has(m.teamAId)) teamStats.set(m.teamAId, { team: m.teamA, points: 0, diff: 0 })
+        if (!teamStats.has(m.teamBId)) teamStats.set(m.teamBId, { team: m.teamB, points: 0, diff: 0 })
+
+        const res = m.results[0]
+        if (res) {
+          const pA = res.pointsA ?? res.finalGoalsA ?? 0
+          const pB = res.pointsB ?? res.finalGoalsB ?? 0
+          const statA = teamStats.get(m.teamAId)!
+          const statB = teamStats.get(m.teamBId)!
+          statA.diff += (pA - pB)
+          statB.diff += (pB - pA)
+          const winId = res.winnerTeamId || (pA > pB ? m.teamAId : pB > pA ? m.teamBId : null)
+          if (winId === m.teamAId) statA.points += 3
+          else if (winId === m.teamBId) statB.points += 3
+          else if (pA === pB) {
+            statA.points += 1
+            statB.points += 1
+          }
+        }
+      }
+
+      const sorted = Array.from(teamStats.values()).sort((a, b) => b.points - a.points || b.diff - a.diff)
+      if (sorted[0]?.team) {
+        const letter = grp.name.replace(/^(GROUP|GRUP)\s*/i, '').trim().toUpperCase()
+        groupWinners.set(letter, sorted[0].team)
+      }
+    }
+
+    type SlotPair = { slot: string; label: string; sideA: string; sideB: string }
+    let slotPairs: SlotPair[] = []
+    if (catCode.includes('junior')) {
+      slotPairs = [
+        { slot: 'QF1', label: 'Perempat Final 1', sideA: 'A', sideB: 'B' },
+        { slot: 'QF2', label: 'Perempat Final 2', sideA: 'C', sideB: 'D' },
+        { slot: 'QF3', label: 'Perempat Final 3', sideA: 'E', sideB: 'F' },
+        { slot: 'QF4', label: 'Perempat Final 4', sideA: 'G', sideB: 'H' },
+      ]
+    } else if (catCode.includes('soccer') || catCode.includes('sumo')) {
+      slotPairs = [
+        { slot: 'R1_AB', label: 'Babak 1 (Match 1)', sideA: 'A', sideB: 'B' },
+        { slot: 'R1_CD', label: 'Babak 1 (Match 2)', sideA: 'C', sideB: 'D' },
+        { slot: 'R1_EF', label: 'Babak 1 (Match 3)', sideA: 'E', sideB: 'F' },
+        { slot: 'R1_GH', label: 'Babak 1 (Match 4)', sideA: 'G', sideB: 'H' },
+        { slot: 'R1_IJ', label: 'Babak 1 (Match 5)', sideA: 'I', sideB: 'J' },
+      ]
+    } else {
+      slotPairs = [
+        { slot: 'R1_1', label: 'Babak Awal (Match 1)', sideA: 'A', sideB: 'B' },
+        { slot: 'R1_2', label: 'Babak Awal (Match 2)', sideA: 'C', sideB: 'D' },
+        { slot: 'R1_3', label: 'Babak Awal (Match 3)', sideA: 'E', sideB: 'F' },
+        { slot: 'R1_4', label: 'Babak Awal (Match 4)', sideA: 'G', sideB: 'H' },
+        { slot: 'R1_5', label: 'Babak Awal (Match 5)', sideA: 'I', sideB: 'J' },
+        { slot: 'R1_6A', label: 'Match 6A (K vs L)', sideA: 'K', sideB: 'L' },
+        { slot: 'R1_6B', label: 'Match 6B (K vs M)', sideA: 'K', sideB: 'M' },
+        { slot: 'R1_6C', label: 'Match 6C (L vs M)', sideA: 'L', sideB: 'M' },
+      ]
+    }
+
+    const existingKnockoutMatches = await client.match.findMany({
+      where: { categoryId, stage: 'KNOCKOUT' },
+    })
+    const maxSeq = await client.match.aggregate({
+      where: { categoryId },
+      _max: { sequence: true },
+    })
+    let nextSeq = (maxSeq._max.sequence ?? 0) + 1
+
+    for (const pair of slotPairs) {
+      const teamA = groupWinners.get(pair.sideA)
+      const teamB = groupWinners.get(pair.sideB)
+      const existing = existingKnockoutMatches.find((m) => m.bracketSlot === pair.slot)
+
+      if (existing) {
+        if (!existing.hasStarted && existing.status === 'SCHEDULED') {
+          const updateData: Record<string, any> = {}
+          if (teamA && teamA.id !== existing.teamAId && teamA.id !== existing.teamBId) {
+            updateData.teamAId = teamA.id
+          }
+          if (teamB && teamB.id !== existing.teamBId && teamB.id !== existing.teamAId) {
+            updateData.teamBId = teamB.id
+          }
+          if (Object.keys(updateData).length > 0) {
+            updateData.matchVersion = { increment: 1 }
+            await client.match.update({
+              where: { id: existing.id },
+              data: updateData,
+            })
+          }
+        }
+      } else if (teamA && teamB && teamA.id !== teamB.id) {
+        await client.match.create({
+          data: {
+            id: randomUUID(),
+            categoryId,
+            stage: 'KNOCKOUT',
+            stageLabel: pair.label,
+            bracketSlot: pair.slot,
+            sequence: nextSeq++,
+            teamAId: teamA.id,
+            teamBId: teamB.id,
+            status: 'SCHEDULED',
+            matchVersion: 1,
+            hasStarted: false,
+          },
+        })
+      }
+    }
+  } catch {
+    // Abaikan error agar tidak memutus respons operator
+  }
+}
+
+async function autoSyncKnockoutProgression(client: PrismaClient, categoryId: string) {
+  try {
+    const category = await client.category.findUnique({ where: { id: categoryId } })
+    if (!category) return
+    const catCode = category.code.toLowerCase()
+    const isSumo = catCode.includes('sumo')
+    const isSoccer = catCode.includes('soccer')
+    const isJunior = catCode.includes('junior')
+
+    const knockoutMatches = await client.match.findMany({
+      where: { categoryId, stage: 'KNOCKOUT' },
+      include: {
+        teamA: true,
+        teamB: true,
+        results: { where: { status: 'FINAL' }, orderBy: { revision: 'desc' } },
+      },
+    })
+
+    const getWinner = (slotId: string) => {
+      const m = knockoutMatches.find((km) => km.bracketSlot === slotId)
+      if (!m || m.status !== 'COMPLETED' || m.results.length === 0) return null
+      const res = m.results[0]
+      if (!res) return null
+      const pA = res.pointsA ?? res.finalGoalsA ?? 0
+      const pB = res.pointsB ?? res.finalGoalsB ?? 0
+      const winId = res.winnerTeamId || (pA > pB ? m.teamAId : pB > pA ? m.teamBId : null)
+      if (!winId) return null
+      return winId === m.teamAId ? m.teamA : m.teamB
+    }
+
+    const maxSeq = await client.match.aggregate({
+      where: { categoryId },
+      _max: { sequence: true },
+    })
+    let nextSeq = (maxSeq._max.sequence ?? 0) + 1
+
+    const ensureMatch = async (slotId: string, stageLabel: string, teamAId: string, teamBId: string) => {
+      if (teamAId === teamBId) return
+      const existing = knockoutMatches.find((m) => m.bracketSlot === slotId)
+      if (existing) {
+        if (!existing.hasStarted && existing.status === 'SCHEDULED') {
+          if (existing.teamAId !== teamAId || existing.teamBId !== teamBId) {
+            await client.match.update({
+              where: { id: existing.id },
+              data: {
+                teamAId,
+                teamBId,
+                stageLabel,
+                matchVersion: { increment: 1 },
+              },
+            })
+          }
+        }
+      } else {
+        await client.match.create({
+          data: {
+            id: randomUUID(),
+            categoryId,
+            stage: 'KNOCKOUT',
+            stageLabel,
+            bracketSlot: slotId,
+            sequence: nextSeq++,
+            teamAId,
+            teamBId,
+            status: 'SCHEDULED',
+            matchVersion: 1,
+            hasStarted: false,
+          },
+        })
+      }
+    }
+
+    // --- 1. LF JUNIOR (8 Tim: QF1..4 -> SF1, SF2 -> FINAL & BRONZE) ---
+    if (isJunior) {
+      const winQF1 = getWinner('QF1')
+      const winQF2 = getWinner('QF2')
+      if (winQF1 && winQF2) {
+        await ensureMatch('SF1', 'Semi Final 1', winQF1.id, winQF2.id)
+      }
+      const winQF3 = getWinner('QF3')
+      const winQF4 = getWinner('QF4')
+      if (winQF3 && winQF4) {
+        await ensureMatch('SF2', 'Semi Final 2', winQF3.id, winQF4.id)
+      }
+      const winSF1 = getWinner('SF1')
+      const winSF2 = getWinner('SF2')
+      if (winSF1 && winSF2) {
+        await ensureMatch('FINAL', 'Grand Final', winSF1.id, winSF2.id)
+      }
+      const mSF1 = knockoutMatches.find((km) => km.bracketSlot === 'SF1' && km.status === 'COMPLETED')
+      const mSF2 = knockoutMatches.find((km) => km.bracketSlot === 'SF2' && km.status === 'COMPLETED')
+      if (mSF1 && mSF2 && winSF1 && winSF2) {
+        const loseSF1Id = winSF1.id === mSF1.teamAId ? mSF1.teamBId : mSF1.teamAId
+        const loseSF2Id = winSF2.id === mSF2.teamAId ? mSF2.teamBId : mSF2.teamAId
+        if (loseSF1Id && loseSF2Id && loseSF1Id !== loseSF2Id) {
+          await ensureMatch('BRONZE', 'Perebutan Juara 3', loseSF1Id, loseSF2Id)
+        }
+      }
+      return
+    }
+
+    // --- 2. LF UMUM (R1_1..5, R1_6A..C -> QF1..3 -> FINAL 1..3 Segitiga) ---
+    if (!isSumo && !isSoccer) {
+      const winR1_1 = getWinner('R1_1')
+      const winR1_2 = getWinner('R1_2')
+      if (winR1_1 && winR1_2) {
+        await ensureMatch('QF1', 'Babak 2 - Blok Atas', winR1_1.id, winR1_2.id)
+      }
+      const winR1_3 = getWinner('R1_3')
+      const winR1_4 = getWinner('R1_4')
+      if (winR1_3 && winR1_4) {
+        await ensureMatch('QF2', 'Babak 2 - Blok Tengah', winR1_3.id, winR1_4.id)
+      }
+      const winR1_5 = getWinner('R1_5')
+      const triMatches = knockoutMatches.filter((m) => ['R1_6A', 'R1_6B', 'R1_6C'].includes(m.bracketSlot || ''))
+      if (triMatches.length === 3 && triMatches.every((m) => m.status === 'COMPLETED')) {
+        const stats = new Map<string, { teamId: string; pts: number; diff: number }>()
+        for (const tm of triMatches) {
+          if (!stats.has(tm.teamAId)) stats.set(tm.teamAId, { teamId: tm.teamAId, pts: 0, diff: 0 })
+          if (!stats.has(tm.teamBId)) stats.set(tm.teamBId, { teamId: tm.teamBId, pts: 0, diff: 0 })
+          const res = tm.results[0]
+          if (res) {
+            const pA = res.pointsA ?? res.finalGoalsA ?? 0
+            const pB = res.pointsB ?? res.finalGoalsB ?? 0
+            const sA = stats.get(tm.teamAId)!
+            const sB = stats.get(tm.teamBId)!
+            sA.diff += (pA - pB)
+            sB.diff += (pB - pA)
+            const wId = res.winnerTeamId || (pA > pB ? tm.teamAId : pB > pA ? tm.teamBId : null)
+            if (wId === tm.teamAId) sA.pts += 3
+            else if (wId === tm.teamBId) sB.pts += 3
+            else if (pA === pB) {
+              sA.pts += 1
+              sB.pts += 1
+            }
+          }
+        }
+        const topTri = Array.from(stats.values()).sort((a, b) => b.pts - a.pts || b.diff - a.diff)[0]?.teamId
+        if (winR1_5 && topTri) {
+          await ensureMatch('QF3', 'Babak 2 - Blok Bawah', winR1_5.id, topTri)
+        }
+      }
+      const winQF1 = getWinner('QF1')
+      const winQF2 = getWinner('QF2')
+      const winQF3 = getWinner('QF3')
+      if (winQF1 && winQF2) {
+        await ensureMatch('FINAL_1', 'Final Match 1 (Atas vs Tengah)', winQF1.id, winQF2.id)
+      }
+      if (winQF1 && winQF3) {
+        await ensureMatch('FINAL_2', 'Final Match 2 (Atas vs Bawah)', winQF1.id, winQF3.id)
+      }
+      if (winQF2 && winQF3) {
+        await ensureMatch('FINAL_3', 'Final Match 3 (Tengah vs Bawah)', winQF2.id, winQF3.id)
+      }
+      return
+    }
+
+    // --- 3. SOCCER & SUMOBOT (R1 -> Babak 2 -> Final Segitiga 3 Tim) ---
+    // 1. Babak 2 (R2_1): Pemenang Match 1 (R1_AB) vs Pemenang Match 2 (R1_CD)
+    const winM1 = getWinner('R1_AB')
+    const winM2 = getWinner('R1_CD')
+    if (winM1 && winM2) {
+      await ensureMatch('R2_1', 'Babak 2 (Match 1 vs 2)', winM1.id, winM2.id)
+    }
+
+    // 2. Babak 2 (R2_2): Pemenang Match 3 (R1_EF) vs Pemenang Match 4 (R1_GH)
+    const winM3 = getWinner('R1_EF')
+    const winM4 = getWinner('R1_GH')
+    if (winM3 && winM4) {
+      await ensureMatch('R2_2', 'Babak 2 (Match 3 vs 4)', winM3.id, winM4.id)
+    }
+
+    // 3. Untuk Soccer: Babak 2 (R2_3) = Pemenang Match 5 (R1_IJ) vs Juara Grup K
+    if (isSoccer) {
+      const winM5 = getWinner('R1_IJ')
+      let teamK = null
+      const groupK = await client.competitionGroup.findFirst({
+        where: { categoryId, name: { contains: 'K' } },
+      })
+      if (groupK) {
+        const kMatches = await client.match.findMany({
+          where: { groupId: groupK.id, stage: 'GROUP' },
+          include: {
+            teamA: true,
+            teamB: true,
+            results: { where: { status: 'FINAL' } },
+          },
+        })
+        if (kMatches.length > 0 && kMatches.every((m) => m.status === 'COMPLETED')) {
+          const stats = new Map<string, { team: any; points: number; diff: number }>()
+          for (const m of kMatches) {
+            if (!stats.has(m.teamAId)) stats.set(m.teamAId, { team: m.teamA, points: 0, diff: 0 })
+            if (!stats.has(m.teamBId)) stats.set(m.teamBId, { team: m.teamB, points: 0, diff: 0 })
+            const res = m.results[0]
+            if (res) {
+              const pA = res.pointsA ?? res.finalGoalsA ?? 0
+              const pB = res.pointsB ?? res.finalGoalsB ?? 0
+              const statA = stats.get(m.teamAId)!
+              const statB = stats.get(m.teamBId)!
+              statA.diff += (pA - pB)
+              statB.diff += (pB - pA)
+              const winId = res.winnerTeamId || (pA > pB ? m.teamAId : pB > pA ? m.teamBId : null)
+              if (winId === m.teamAId) statA.points += 3
+              else if (winId === m.teamBId) statB.points += 3
+              else if (pA === pB) {
+                statA.points += 1
+                statB.points += 1
+              }
+            }
+          }
+          teamK = Array.from(stats.values()).sort((a, b) => b.points - a.points || b.diff - a.diff)[0]?.team ?? null
+        }
+      }
+      if (!teamK) {
+        const existingR2_3 = knockoutMatches.find((m) => m.bracketSlot === 'R2_3')
+        if (existingR2_3) teamK = existingR2_3.teamB
+      }
+      if (winM5 && teamK) {
+        await ensureMatch('R2_3', 'Babak 2 (Match 5 vs Grup K)', winM5.id, teamK.id)
+      }
+    }
+
+    // 4. Final Segitiga 3 Tim:
+    // Tim X = Pemenang R2_1 (M1 vs M2)
+    // Tim Y = Pemenang R2_2 (M3 vs M4)
+    // Tim Z:
+    //   - Sumo: Pemenang Match 5 (R1_IJ)
+    //   - Soccer: Pemenang R2_3 (Match 5 vs Juara Grup K)
+    const winX = getWinner('R2_1')
+    const winY = getWinner('R2_2')
+    const winZ = isSoccer ? getWinner('R2_3') : getWinner('R1_IJ')
+
+    if (winX && winY) {
+      await ensureMatch('FINAL_1', 'Final Match 1 (X vs Y)', winX.id, winY.id)
+    }
+    if (winX && winZ) {
+      await ensureMatch('FINAL_2', 'Final Match 2 (X vs Z)', winX.id, winZ.id)
+    }
+    if (winY && winZ) {
+      await ensureMatch('FINAL_3', 'Final Match 3 (Y vs Z)', winY.id, winZ.id)
+    }
+  } catch {
+    // Abaikan error agar tidak memutus respons operator
+  }
+}
+
 export function registerMatchRoutes(
   server: FastifyInstance,
   client: PrismaClient,
@@ -359,7 +742,10 @@ export function registerMatchRoutes(
 
       const match = await client.match.findUnique({
         where: { id: matchId },
-        include: { segments: { orderBy: [{ ordinal: 'asc' }, { attempt: 'asc' }] } },
+        include: {
+          category: { select: { id: true, code: true } },
+          segments: { orderBy: [{ ordinal: 'asc' }, { attempt: 'asc' }] },
+        },
       })
       if (!match) {
         return errorResponse(reply, 404, 'NOT_FOUND', 'Match tidak ditemukan.', request.id)
@@ -368,7 +754,11 @@ export function registerMatchRoutes(
         return errorResponse(reply, 409, 'VERSION_CONFLICT', 'Match version conflict.', request.id, { currentMatchVersion: match.matchVersion })
       }
 
-      const currentSegment = match.segments[match.segments.length - 1]
+      const activeSegment = match.segments.find((s) => s.status === 'ACTIVE')
+      const nextPreparedSegment = match.segments.find((s) => s.status === 'PREPARED')
+      const currentSegment = (action === 'phase.advance' && (body?.targetPhase as string) === 'COMPETITION')
+        ? (nextPreparedSegment || activeSegment || match.segments[match.segments.length - 1])
+        : (activeSegment || nextPreparedSegment || match.segments[match.segments.length - 1])
 
       if (action === 'match.arm-start') {
         const reviewDigest = body?.reviewDigest as string | undefined
@@ -460,7 +850,9 @@ export function registerMatchRoutes(
       if (action === 'segment.prepare') {
         const kind = (body?.kind as 'START' | 'ROUND' | 'HALF') ?? 'ROUND'
         const ordinal = (body?.ordinal as number) ?? 1
-        const durationMs = (body?.durationMs as number) ?? 300_000
+        const catCode = (match.category?.code ?? '').toLowerCase()
+        const defaultDuration = catCode.includes('soccer') ? 180_000 : 120_000
+        const durationMs = (body?.durationMs as number) ?? defaultDuration
 
         const evalRes = evaluateMatchTransition(
           match.status as MatchStatus,
@@ -474,17 +866,31 @@ export function registerMatchRoutes(
 
         const segmentId = randomUUID()
         const result = await client.$transaction(async (tx) => {
-          const seg = await tx.segmentAttempt.create({
-            data: {
-              id: segmentId,
-              matchId: match.id,
-              kind,
-              ordinal,
-              attempt: 1,
-              status: 'PREPARED',
-              durationMs,
+          const existing = await tx.segmentAttempt.findUnique({
+            where: {
+              matchId_ordinal_attempt: { matchId: match.id, ordinal, attempt: 1 },
             },
           })
+
+          let seg
+          if (existing) {
+            seg = await tx.segmentAttempt.update({
+              where: { id: existing.id },
+              data: { status: 'PREPARED', durationMs },
+            })
+          } else {
+            seg = await tx.segmentAttempt.create({
+              data: {
+                id: segmentId,
+                matchId: match.id,
+                kind,
+                ordinal,
+                attempt: 1,
+                status: 'PREPARED',
+                durationMs,
+              },
+            })
+          }
 
           // SC-01: Invalidate any old READY goal intent
           await tx.goalIntent.updateMany({
@@ -495,7 +901,7 @@ export function registerMatchRoutes(
           const updatedMatch = await tx.match.update({
             where: { id: match.id },
             data: {
-              currentSegmentId: segmentId,
+              currentSegmentId: seg.id,
               matchVersion: { increment: 1 },
             },
           })
@@ -743,6 +1149,17 @@ export function registerMatchRoutes(
         // When advancing to COMPETITION, first attempt PREPARED -> ACTIVE atomically!
         const result = await client.$transaction(async (tx) => {
           let activeGoalIntentId: string | null = null
+
+          if ((targetPhase === 'INTERMISSION' || targetPhase === 'RESULT') && activeSegment) {
+            await tx.segmentAttempt.update({
+              where: { id: activeSegment.id },
+              data: {
+                status: 'ENDED',
+                endedAt: new Date(),
+              },
+            })
+          }
+
           if (targetPhase === 'COMPETITION' && currentSegment && currentSegment.status === 'PREPARED') {
             await tx.segmentAttempt.update({
               where: { id: currentSegment.id },
@@ -849,6 +1266,55 @@ export function registerMatchRoutes(
             data: {
               id: randomUUID(),
               action: 'match.pause',
+              resourceType: 'Match',
+              resourceId: match.id,
+              actorId: request.authPrincipal?.userId ?? null,
+              reason,
+            },
+          })
+          return m
+        })
+
+        return reply.code(200).send({
+          matchVersion: updatedMatch.matchVersion,
+          status: updatedMatch.status,
+          phase: updatedMatch.phase,
+        })
+      }
+
+      if (action === 'match.resume') {
+        const reason = (body?.reason as string) ?? 'Lanjutkan pertandingan'
+        const evalRes = evaluateMatchTransition(
+          match.status as MatchStatus,
+          match.phase as MatchPhase | null,
+          { type: 'start' },
+          { role, hasStarted: match.hasStarted },
+        )
+        if (!evalRes.allowed) {
+          return errorResponse(reply, 409, evalRes.errorCode ?? 'INVALID_TRANSITION', evalRes.message ?? 'Lanjutkan pertandingan tidak dapat dilakukan.', request.id)
+        }
+
+        if (timerService) {
+          try {
+            await timerService.start({ matchId: match.id, actorId: request.authPrincipal?.userId ?? null })
+          } catch {
+            // ignore if timer not ready or mocked
+          }
+        }
+
+        const updatedMatch = await client.$transaction(async (tx) => {
+          const m = await tx.match.update({
+            where: { id: match.id },
+            data: {
+              status: evalRes.targetStatus,
+              matchVersion: { increment: 1 },
+            },
+          })
+
+          await tx.auditEntry.create({
+            data: {
+              id: randomUUID(),
+              action: 'match.resume',
               resourceType: 'Match',
               resourceId: match.id,
               actorId: request.authPrincipal?.userId ?? null,
@@ -1070,12 +1536,8 @@ export function registerMatchRoutes(
       }
 
       if (action === 'goal.prepare-next') {
-        const previousGoalIntentId = body?.previousGoalIntentId as string
+        const previousGoalIntentId = body?.previousGoalIntentId as string | undefined
         const targetSegmentAttemptId = body?.targetSegmentAttemptId as string | undefined
-
-        if (!previousGoalIntentId) {
-          return errorResponse(reply, 422, 'INVALID_INPUT', 'previousGoalIntentId wajib diisi.', request.id)
-        }
 
         // Idempotency check: if READY intent already exists for this match, return it
         const existingReady = await client.goalIntent.findFirst({
@@ -1090,13 +1552,25 @@ export function registerMatchRoutes(
         }
 
         // Verify previous intent was consumed or invalidated
-        const prev = await client.goalIntent.findUnique({
-          where: { id: previousGoalIntentId },
-        })
-        if (!prev || prev.matchId !== match.id) {
-          return errorResponse(reply, 404, 'NOT_FOUND', 'Previous goal intent tidak ditemukan.', request.id)
+        let prev = null
+        if (previousGoalIntentId && previousGoalIntentId !== 'last-consumed-id') {
+          prev = await client.goalIntent.findUnique({
+            where: { id: previousGoalIntentId },
+          })
+          if (prev && prev.matchId !== match.id) {
+            return errorResponse(reply, 404, 'NOT_FOUND', 'Previous goal intent tidak ditemukan.', request.id)
+          }
         }
-        if (prev.status === 'READY') {
+
+        // Fallback: ambil intent terakhir yang sudah CONSUMED atau INVALIDATED pada match ini
+        if (!prev) {
+          prev = await client.goalIntent.findFirst({
+            where: { matchId: match.id, status: { in: ['CONSUMED', 'INVALIDATED'] } },
+            orderBy: { createdAt: 'desc' },
+          })
+        }
+
+        if (prev?.status === 'READY') {
           return reply.code(200).send({
             goalIntentId: prev.id,
             status: prev.status,
@@ -1105,13 +1579,22 @@ export function registerMatchRoutes(
         }
 
         // Determine target segment attempt (must have been played / active)
-        let segId = prev.segmentAttemptId
+        let segId = prev?.segmentAttemptId
+        if (!segId) {
+          const activeSeg = match.segments.find((s) => s.status === 'ACTIVE') || match.segments[0]
+          segId = activeSeg?.id
+        }
+
         if (targetSegmentAttemptId) {
           const seg = match.segments.find((s) => s.id === targetSegmentAttemptId)
           if (!seg || (!seg.activatedAt && seg.status === 'PREPARED')) {
             return errorResponse(reply, 409, 'INVALID_TRANSITION', 'Target segment attempt tidak sah atau belum pernah dimainkan.', request.id)
           }
           segId = seg.id
+        }
+
+        if (!segId) {
+          return errorResponse(reply, 404, 'NOT_FOUND', 'Segment attempt tidak ditemukan untuk menyiapkan gol.', request.id)
         }
 
         const newIntentId = randomUUID()
@@ -1517,6 +2000,14 @@ export function registerMatchRoutes(
           } catch {
             // ignore
           }
+        }
+
+        // Sinkronisasi otomatis juara grup ke slot babak gugur jika match berada di fase GROUP
+        if (match.stage === 'GROUP') {
+          await autoSyncGroupWinnerToBracket(client, match.categoryId)
+        }
+        if (match.stage === 'KNOCKOUT') {
+          await autoSyncKnockoutProgression(client, match.categoryId)
         }
 
         return reply.code(200).send({

@@ -29,7 +29,7 @@ export interface TournamentBracketProps {
   groupWinners?: Array<{
     groupName: string
     teamName: string
-    teamCode: string
+    teamCode?: string
   }>
   onSelectMatch?: (matchId: string, matchVersion: number) => void
   readOnly?: boolean
@@ -61,6 +61,16 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
     })
   }
 
+  // Cari pemenang dari match babak gugur sebelumnya (misal: R1_AB, QF1, SF1)
+  const getWinnerOfSlot = (sourceSlotId?: string) => {
+    if (!sourceSlotId) return null
+    const sourceMatch = getMatchBySlot(sourceSlotId)
+    if (!sourceMatch || sourceMatch.status !== 'COMPLETED') return null
+    if (sourceMatch.teamA?.isWinner) return { teamName: sourceMatch.teamA.name, teamCode: sourceMatch.teamA.code }
+    if (sourceMatch.teamB?.isWinner) return { teamName: sourceMatch.teamB.name, teamCode: sourceMatch.teamB.code }
+    return null
+  }
+
   const renderCard = (
     slotId: string,
     defaultTitle: string,
@@ -74,11 +84,20 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
     const teamB = m?.teamB
     const isLive = m?.status === 'IN_PROGRESS' || m?.status === 'PAUSED'
     const isDone = m?.status === 'COMPLETED'
-    const canSelect = !readOnly && m && m.status === 'SCHEDULED' && teamA && teamB && onSelectMatch
+    // Anggap tim belum ada jika nama/code mengandung TBD
+    const isTbdA = !teamA?.name || teamA.name.toUpperCase().includes('TBD') || (teamA.code && teamA.code.toUpperCase().includes('TBD'))
+    const isTbdB = !teamB?.name || teamB.name.toUpperCase().includes('TBD') || (teamB.code && teamB.code.toUpperCase().includes('TBD'))
 
-    // Jika match gugur belum dibuat tapi grupnya sudah punya pemenang klasemen
-    const previewA = !teamA && expectedGroupA ? getWinnerOfGroup(expectedGroupA) : null
-    const previewB = !teamB && expectedGroupB ? getWinnerOfGroup(expectedGroupB) : null
+    const previewA = !teamA && expectedGroupA
+      ? (expectedGroupA.length <= 2 ? getWinnerOfGroup(expectedGroupA) : getWinnerOfSlot(expectedGroupA))
+      : null
+    const previewB = !teamB && expectedGroupB
+      ? (expectedGroupB.length <= 2 ? getWinnerOfGroup(expectedGroupB) : getWinnerOfSlot(expectedGroupB))
+      : null
+
+    const displayNameA = teamA?.name ? teamA.name : previewA ? previewA.teamName : defaultSourceA || 'TBD'
+    const displayNameB = teamB?.name ? teamB.name : previewB ? previewB.teamName : defaultSourceB || 'TBD'
+    const canSelect = !readOnly && m && m.status === 'SCHEDULED' && !isTbdA && !isTbdB && onSelectMatch
 
     return (
       <div className={`bracket-match-card ${isLive ? 'is-live' : isDone ? 'is-completed' : ''}`}>
@@ -91,32 +110,32 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
 
         {/* Tim A */}
         <div className={`bracket-team-row ${teamA?.isWinner ? 'winner' : ''}`}>
-          <span className="bracket-team-name" title={teamA?.name ?? previewA?.teamName ?? defaultSourceA}>
+          <span className="bracket-team-name" title={displayNameA}>
             {teamA?.name || previewA ? (
               <span>
-                {teamA?.name ?? previewA?.teamName}{' '}
+                {displayNameA}{' '}
                 {previewA && <small style={{ color: '#0369a1', fontSize: '10px' }}>({defaultSourceA})</small>}
               </span>
             ) : (
-              <em style={{ color: 'var(--color-stone)' }}>{defaultSourceA || 'TBD'}</em>
+              <em style={{ color: 'var(--color-stone)' }}>{displayNameA}</em>
             )}
           </span>
-          <span className="bracket-team-score">{teamA?.score ?? '-'}</span>
+          <span className="bracket-team-score">{!isTbdA && teamA?.score !== null ? teamA?.score : '-'}</span>
         </div>
 
         {/* Tim B */}
         <div className={`bracket-team-row ${teamB?.isWinner ? 'winner' : ''}`}>
-          <span className="bracket-team-name" title={teamB?.name ?? previewB?.teamName ?? defaultSourceB}>
+          <span className="bracket-team-name" title={displayNameB}>
             {teamB?.name || previewB ? (
               <span>
-                {teamB?.name ?? previewB?.teamName}{' '}
+                {displayNameB}{' '}
                 {previewB && <small style={{ color: '#0369a1', fontSize: '10px' }}>({defaultSourceB})</small>}
               </span>
             ) : (
-              <em style={{ color: 'var(--color-stone)' }}>{defaultSourceB || 'TBD'}</em>
+              <em style={{ color: 'var(--color-stone)' }}>{displayNameB}</em>
             )}
           </span>
-          <span className="bracket-team-score">{teamB?.score ?? '-'}</span>
+          <span className="bracket-team-score">{!isTbdB && teamB?.score !== null ? teamB?.score : '-'}</span>
         </div>
 
         {canSelect && (
@@ -149,23 +168,23 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
             {/* Ronde 1: Perempat Final */}
             <div className="bracket-round">
               <div className="bracket-round-title">Perempat Final</div>
-              {renderCard('QF1', 'QF 1', 'Juara Grup A', 'Juara Grup B')}
-              {renderCard('QF2', 'QF 2', 'Juara Grup C', 'Juara Grup D')}
-              {renderCard('QF3', 'QF 3', 'Juara Grup E', 'Juara Grup F')}
-              {renderCard('QF4', 'QF 4', 'Juara Grup G', 'Juara Grup H')}
+              {renderCard('QF1', 'QF 1', 'Juara Grup A', 'Juara Grup B', 'A', 'B')}
+              {renderCard('QF2', 'QF 2', 'Juara Grup C', 'Juara Grup D', 'C', 'D')}
+              {renderCard('QF3', 'QF 3', 'Juara Grup E', 'Juara Grup F', 'E', 'F')}
+              {renderCard('QF4', 'QF 4', 'Juara Grup G', 'Juara Grup H', 'G', 'H')}
             </div>
 
             {/* Ronde 2: Semi Final */}
             <div className="bracket-round">
               <div className="bracket-round-title">Semi Final</div>
-              {renderCard('SF1', 'Semi Final 1', 'Pemenang QF 1', 'Pemenang QF 2')}
-              {renderCard('SF2', 'Semi Final 2', 'Pemenang QF 3', 'Pemenang QF 4')}
+              {renderCard('SF1', 'Semi Final 1', 'Pemenang QF 1', 'Pemenang QF 2', 'QF1', 'QF2')}
+              {renderCard('SF2', 'Semi Final 2', 'Pemenang QF 3', 'Pemenang QF 4', 'QF3', 'QF4')}
             </div>
 
             {/* Ronde 3: Final & Juara 3 */}
             <div className="bracket-round">
               <div className="bracket-round-title">Grand Final & Juara 3</div>
-              {renderCard('FINAL', 'Grand Final (Juara 1 & 2)', 'Pemenang SF 1', 'Pemenang SF 2')}
+              {renderCard('FINAL', 'Grand Final (Juara 1 & 2)', 'Pemenang SF 1', 'Pemenang SF 2', 'SF1', 'SF2')}
               {renderCard('BRONZE', 'Perebutan Juara 3', 'Kalah SF 1', 'Kalah SF 2')}
             </div>
 
@@ -189,7 +208,7 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
     )
   }
 
-  // 2. Template ROBOT SOCCER (11 Tim: Grup A-K dengan Slot K & Poin Tertinggi)
+  // 2. Template ROBOT SOCCER (11 Tim: Grup A-K dengan Final Segitiga 3 Tim)
   if (isSoccer) {
     return (
       <div className="bracket-container">
@@ -197,47 +216,47 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
           <h3 className="bracket-title">
             <span>🏆 Bagan Sistem Gugur: {categoryLabel}</span>
           </h3>
-          <span className="status-pill info">11 Juara Grup (A s/d K) + Slot Poin Tertinggi</span>
+          <span className="status-pill info">11 Juara Grup (A s/d K) • Final Segitiga (3 Besar)</span>
         </div>
 
         <div className="bracket-scroll-wrapper">
           <div className="bracket-tree">
             {/* Babak 1 (Babak Gugur Awal) */}
             <div className="bracket-round">
-              <div className="bracket-round-title">Babak Gugur 1</div>
-              {renderCard('R1_AB', 'Match 1', 'Juara Grup A', 'Juara Grup B')}
-              {renderCard('R1_CD', 'Match 2', 'Juara Grup C', 'Juara Grup D')}
-              {renderCard('R1_EF', 'Match 3', 'Juara Grup E', 'Juara Grup F')}
-              {renderCard('R1_GH', 'Match 4', 'Juara Grup G', 'Juara Grup H')}
-              {renderCard('R1_IJ', 'Match 5', 'Juara Grup I', 'Juara Grup J')}
+              <div className="bracket-round-title">Babak 1 (Babak Gugur)</div>
+              {renderCard('R1_AB', 'Match 1', 'Juara Grup A', 'Juara Grup B', 'A', 'B')}
+              {renderCard('R1_CD', 'Match 2', 'Juara Grup C', 'Juara Grup D', 'C', 'D')}
+              {renderCard('R1_EF', 'Match 3', 'Juara Grup E', 'Juara Grup F', 'E', 'F')}
+              {renderCard('R1_GH', 'Match 4', 'Juara Grup G', 'Juara Grup H', 'G', 'H')}
+              {renderCard('R1_IJ', 'Match 5', 'Juara Grup I', 'Juara Grup J', 'I', 'J')}
               <div className="bracket-special-slot">
-                <span>GRUP K (Lolos Otomatis ke Perempat Final)</span>
+                <span>GRUP K &rarr; Lolos Langsung ke Babak 2 (Match 6)</span>
               </div>
             </div>
 
-            {/* Babak 2 (Perempat Final) */}
+            {/* Babak 2 (Menuju Final) */}
             <div className="bracket-round">
-              <div className="bracket-round-title">Perempat Final</div>
-              {renderCard('QF1', 'Perempat Final 1', 'Pemenang A vs B', 'Pemenang C vs D')}
-              {renderCard('QF2', 'Perempat Final 2', 'Pemenang E vs F', 'Pemenang G vs H')}
-              {renderCard('QF3', 'Perempat Final 3', 'Pemenang I vs J', 'Juara Grup K')}
-              <div className="bracket-special-slot">
-                <span>POIN TERTINGGI (Kualifikasi ke Semi Final)</span>
+              <div className="bracket-round-title">Babak 2 (Menuju Final)</div>
+              {renderCard('R2_1', 'Kualifikasi Final 1', 'Pemenang Match 1', 'Pemenang Match 2', 'R1_AB', 'R1_CD')}
+              {renderCard('R2_2', 'Kualifikasi Final 2', 'Pemenang Match 3', 'Pemenang Match 4', 'R1_EF', 'R1_GH')}
+              {renderCard('R2_3', 'Kualifikasi Final 3', 'Pemenang Match 5', 'Juara Grup K', 'R1_IJ', 'K')}
+            </div>
+
+            {/* Babak Final Segitiga 3 Tim */}
+            <div className="bracket-round">
+              <div className="bracket-round-title">Babak Final (3 Besar)</div>
+              <div className="bracket-round-group-box" style={{ backgroundColor: '#fff', border: '2px solid #eab308' }}>
+                <div className="bracket-group-box-header" style={{ paddingBottom: '6px', borderBottom: '1px solid #fef08a' }}>
+                  <strong style={{ color: '#854d0e', fontSize: '12px' }}>Perebutan Juara 1, 2, & 3 (Sistem Segitiga)</strong>
+                  <span className="badge-warning">3 Finalis</span>
+                </div>
+                {renderCard('FINAL_1', 'Final Match 1 (X vs Y)', 'Pemenang M1 vs M2 (Tim X)', 'Pemenang M3 vs M4 (Tim Y)', 'R2_1', 'R2_2')}
+                {renderCard('FINAL_2', 'Final Match 2 (X vs Z)', 'Pemenang M1 vs M2 (Tim X)', 'Pemenang M5 vs Grup K (Tim Z)', 'R2_1', 'R2_3')}
+                {renderCard('FINAL_3', 'Final Match 3 (Y vs Z)', 'Pemenang M3 vs M4 (Tim Y)', 'Pemenang M5 vs Grup K (Tim Z)', 'R2_2', 'R2_3')}
+                <div style={{ fontSize: '11px', color: 'var(--color-stone)', textAlign: 'center', padding: '4px 0 2px' }}>
+                  3 Tim Bertanding Saling Berhadapan (X vs Y, X vs Z, Y vs Z)
+                </div>
               </div>
-            </div>
-
-            {/* Babak 3 (Semi Final) */}
-            <div className="bracket-round">
-              <div className="bracket-round-title">Semi Final</div>
-              {renderCard('SF1', 'Semi Final 1', 'Pemenang QF 1', 'Poin Tertinggi')}
-              {renderCard('SF2', 'Semi Final 2', 'Pemenang QF 2', 'Pemenang QF 3')}
-            </div>
-
-            {/* Babak 4 (Final & Juara 3) */}
-            <div className="bracket-round">
-              <div className="bracket-round-title">Grand Final & Juara 3</div>
-              {renderCard('FINAL', 'Grand Final', 'Pemenang SF 1', 'Pemenang SF 2')}
-              {renderCard('BRONZE', 'Perebutan Juara 3', 'Kalah SF 1', 'Kalah SF 2')}
             </div>
 
             {/* Podium Pemenang */}
@@ -245,12 +264,25 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
               <div className="bracket-winner-podium">
                 <span className="trophy">🏆</span>
                 <strong style={{ fontSize: '14px', color: '#854d0e' }}>WINNER SOCCER</strong>
-                <span style={{ fontSize: '13px', fontWeight: 600 }}>
-                  {getMatchBySlot('FINAL')?.teamA?.isWinner
-                    ? getMatchBySlot('FINAL')?.teamA?.name
-                    : getMatchBySlot('FINAL')?.teamB?.isWinner
-                      ? getMatchBySlot('FINAL')?.teamB?.name
-                      : '-'}
+                <span style={{ fontSize: '11px', color: '#a16207' }}>Robot Soccer</span>
+                <span style={{ fontSize: '13px', fontWeight: 600, marginTop: '4px' }}>
+                  {getMatchBySlot('FINAL_1')?.teamA?.isWinner
+                    ? getMatchBySlot('FINAL_1')?.teamA?.name
+                    : getMatchBySlot('FINAL_1')?.teamB?.isWinner
+                      ? getMatchBySlot('FINAL_1')?.teamB?.name
+                      : getMatchBySlot('FINAL_2')?.teamA?.isWinner
+                        ? getMatchBySlot('FINAL_2')?.teamA?.name
+                        : getMatchBySlot('FINAL_2')?.teamB?.isWinner
+                          ? getMatchBySlot('FINAL_2')?.teamB?.name
+                          : getMatchBySlot('FINAL_3')?.teamA?.isWinner
+                            ? getMatchBySlot('FINAL_3')?.teamA?.name
+                            : getMatchBySlot('FINAL_3')?.teamB?.isWinner
+                              ? getMatchBySlot('FINAL_3')?.teamB?.name
+                              : getMatchBySlot('FINAL')?.teamA?.isWinner
+                                ? getMatchBySlot('FINAL')?.teamA?.name
+                                : getMatchBySlot('FINAL')?.teamB?.isWinner
+                                  ? getMatchBySlot('FINAL')?.teamB?.name
+                                  : '-'}
                 </span>
               </div>
             </div>
@@ -260,7 +292,7 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
     )
   }
 
-  // 3. Template SUMOBOT (10 Tim: Grup A-J dengan Slot Poin Tertinggi)
+  // 3. Template SUMOBOT (10 Tim: Grup A-J dengan Final Segitiga 3 Tim)
   if (isSumo) {
     return (
       <div className="bracket-container">
@@ -268,46 +300,46 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
           <h3 className="bracket-title">
             <span>🏆 Bagan Sistem Gugur: {categoryLabel}</span>
           </h3>
-          <span className="status-pill info">10 Juara Grup (A s/d J) + Slot Poin Tertinggi</span>
+          <span className="status-pill info">10 Juara Grup (A s/d J) • Final Segitiga (3 Besar)</span>
         </div>
 
         <div className="bracket-scroll-wrapper">
           <div className="bracket-tree">
             {/* Babak 1 */}
             <div className="bracket-round">
-              <div className="bracket-round-title">Babak 1</div>
-              {renderCard('R1_AB', 'Match 1', 'Juara Grup A', 'Juara Grup B')}
-              {renderCard('R1_CD', 'Match 2', 'Juara Grup C', 'Juara Grup D')}
-              {renderCard('R1_EF', 'Match 3', 'Juara Grup E', 'Juara Grup F')}
-              {renderCard('R1_GH', 'Match 4', 'Juara Grup G', 'Juara Grup H')}
-              {renderCard('R1_IJ', 'Match 5', 'Juara Grup I', 'Juara Grup J')}
+              <div className="bracket-round-title">Babak 1 (Babak Gugur)</div>
+              {renderCard('R1_AB', 'Match 1', 'Juara Grup A', 'Juara Grup B', 'A', 'B')}
+              {renderCard('R1_CD', 'Match 2', 'Juara Grup C', 'Juara Grup D', 'C', 'D')}
+              {renderCard('R1_EF', 'Match 3', 'Juara Grup E', 'Juara Grup F', 'E', 'F')}
+              {renderCard('R1_GH', 'Match 4', 'Juara Grup G', 'Juara Grup H', 'G', 'H')}
+              {renderCard('R1_IJ', 'Match 5', 'Juara Grup I', 'Juara Grup J', 'I', 'J')}
             </div>
 
             {/* Babak 2 */}
             <div className="bracket-round">
-              <div className="bracket-round-title">Babak 2</div>
-              {renderCard('R2_1', 'Kualifikasi SF 1', 'Pemenang Match 1', 'Pemenang Match 2')}
-              {renderCard('R2_2', 'Kualifikasi SF 2', 'Pemenang Match 3', 'Pemenang Match 4')}
+              <div className="bracket-round-title">Babak 2 (Menuju Final)</div>
+              {renderCard('R2_1', 'Kualifikasi Final 1', 'Pemenang Match 1', 'Pemenang Match 2', 'R1_AB', 'R1_CD')}
+              {renderCard('R2_2', 'Kualifikasi Final 2', 'Pemenang Match 3', 'Pemenang Match 4', 'R1_EF', 'R1_GH')}
               <div className="bracket-special-slot">
-                <span>Pemenang Match 5 menunggu penantang</span>
-              </div>
-              <div className="bracket-special-slot">
-                <span>POIN TERTINGGI (Lolos ke SF)</span>
+                <span>Match 5 (Juara Grup I vs J) &rarr; Langsung Lolos ke Final (Tim Z)</span>
               </div>
             </div>
 
-            {/* Babak 3: Semi Final */}
+            {/* Babak Final Segitiga 3 Tim */}
             <div className="bracket-round">
-              <div className="bracket-round-title">Semi Final</div>
-              {renderCard('SF1', 'Semi Final 1', 'Pemenang Kualifikasi 1', 'Poin Tertinggi')}
-              {renderCard('SF2', 'Semi Final 2', 'Pemenang Kualifikasi 2', 'Pemenang Match 5')}
-            </div>
-
-            {/* Babak 4: Final & Juara 3 */}
-            <div className="bracket-round">
-              <div className="bracket-round-title">Grand Final & Juara 3</div>
-              {renderCard('FINAL', 'Grand Final', 'Pemenang SF 1', 'Pemenang SF 2')}
-              {renderCard('BRONZE', 'Perebutan Juara 3', 'Kalah SF 1', 'Kalah SF 2')}
+              <div className="bracket-round-title">Babak Final (3 Besar)</div>
+              <div className="bracket-round-group-box" style={{ backgroundColor: '#fff', border: '2px solid #eab308' }}>
+                <div className="bracket-group-box-header" style={{ paddingBottom: '6px', borderBottom: '1px solid #fef08a' }}>
+                  <strong style={{ color: '#854d0e', fontSize: '12px' }}>Perebutan Juara 1, 2, & 3 (Sistem Segitiga)</strong>
+                  <span className="badge-warning">3 Finalis</span>
+                </div>
+                {renderCard('FINAL_1', 'Final Match 1 (X vs Y)', 'Pemenang M1 vs M2 (Tim X)', 'Pemenang M3 vs M4 (Tim Y)', 'R2_1', 'R2_2')}
+                {renderCard('FINAL_2', 'Final Match 2 (X vs Z)', 'Pemenang M1 vs M2 (Tim X)', 'Pemenang Match 5 (Tim Z)', 'R2_1', 'R1_IJ')}
+                {renderCard('FINAL_3', 'Final Match 3 (Y vs Z)', 'Pemenang M3 vs M4 (Tim Y)', 'Pemenang Match 5 (Tim Z)', 'R2_2', 'R1_IJ')}
+                <div style={{ fontSize: '11px', color: 'var(--color-stone)', textAlign: 'center', padding: '4px 0 2px' }}>
+                  3 Tim Bertanding Saling Berhadapan (X vs Y, X vs Z, Y vs Z)
+                </div>
+              </div>
             </div>
 
             {/* Podium Pemenang */}
@@ -315,12 +347,25 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
               <div className="bracket-winner-podium">
                 <span className="trophy">🏆</span>
                 <strong style={{ fontSize: '14px', color: '#854d0e' }}>WINNER SUMO</strong>
-                <span style={{ fontSize: '13px', fontWeight: 600 }}>
-                  {getMatchBySlot('FINAL')?.teamA?.isWinner
-                    ? getMatchBySlot('FINAL')?.teamA?.name
-                    : getMatchBySlot('FINAL')?.teamB?.isWinner
-                      ? getMatchBySlot('FINAL')?.teamB?.name
-                      : '-'}
+                <span style={{ fontSize: '11px', color: '#a16207' }}>Robot Sumo</span>
+                <span style={{ fontSize: '13px', fontWeight: 600, marginTop: '4px' }}>
+                  {getMatchBySlot('FINAL_1')?.teamA?.isWinner
+                    ? getMatchBySlot('FINAL_1')?.teamA?.name
+                    : getMatchBySlot('FINAL_1')?.teamB?.isWinner
+                      ? getMatchBySlot('FINAL_1')?.teamB?.name
+                      : getMatchBySlot('FINAL_2')?.teamA?.isWinner
+                        ? getMatchBySlot('FINAL_2')?.teamA?.name
+                        : getMatchBySlot('FINAL_2')?.teamB?.isWinner
+                          ? getMatchBySlot('FINAL_2')?.teamB?.name
+                          : getMatchBySlot('FINAL_3')?.teamA?.isWinner
+                            ? getMatchBySlot('FINAL_3')?.teamA?.name
+                            : getMatchBySlot('FINAL_3')?.teamB?.isWinner
+                              ? getMatchBySlot('FINAL_3')?.teamB?.name
+                              : getMatchBySlot('FINAL')?.teamA?.isWinner
+                                ? getMatchBySlot('FINAL')?.teamA?.name
+                                : getMatchBySlot('FINAL')?.teamB?.isWinner
+                                  ? getMatchBySlot('FINAL')?.teamB?.name
+                                  : '-'}
                 </span>
               </div>
             </div>
@@ -369,9 +414,9 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
           {/* Babak 2: Perempat Final (Menuju 3 Besar) */}
           <div className="bracket-round">
             <div className="bracket-round-title">Babak 2 (Menuju 3 Besar)</div>
-            {renderCard('QF1', 'Babak 2 - Blok Atas', 'Pemenang Match 1', 'Pemenang Match 2')}
-            {renderCard('QF2', 'Babak 2 - Blok Tengah', 'Pemenang Match 3', 'Pemenang Match 4')}
-            {renderCard('QF3', 'Babak 2 - Blok Bawah', 'Pemenang Match 5', 'Top 1 Segitiga (K-L-M)')}
+            {renderCard('QF1', 'Babak 2 - Blok Atas', 'Pemenang Match 1', 'Pemenang Match 2', 'R1_1', 'R1_2')}
+            {renderCard('QF2', 'Babak 2 - Blok Tengah', 'Pemenang Match 3', 'Pemenang Match 4', 'R1_3', 'R1_4')}
+            {renderCard('QF3', 'Babak 2 - Blok Bawah', 'Pemenang Match 5', 'Top 1 Segitiga (K-L-M)', 'R1_5')}
           </div>
 
           {/* Babak 3: Babak Final 3 Besar (Sesuai Diagram Resmi) */}
@@ -382,9 +427,9 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
                 <strong style={{ color: '#854d0e', fontSize: '12px' }}>Perebutan Juara 1, 2, & 3</strong>
                 <span className="badge-warning">3 Finalis</span>
               </div>
-              {renderCard('FINAL_1', 'Final Match 1', 'Pemenang Blok Atas', 'Pemenang Blok Tengah')}
-              {renderCard('FINAL_2', 'Final Match 2', 'Pemenang Blok Atas', 'Pemenang Blok Bawah')}
-              {renderCard('FINAL_3', 'Final Match 3', 'Pemenang Blok Tengah', 'Pemenang Blok Bawah')}
+              {renderCard('FINAL_1', 'Final Match 1', 'Pemenang Blok Atas', 'Pemenang Blok Tengah', 'QF1', 'QF2')}
+              {renderCard('FINAL_2', 'Final Match 2', 'Pemenang Blok Atas', 'Pemenang Blok Bawah', 'QF1', 'QF3')}
+              {renderCard('FINAL_3', 'Final Match 3', 'Pemenang Blok Tengah', 'Pemenang Blok Bawah', 'QF2', 'QF3')}
             </div>
           </div>
 

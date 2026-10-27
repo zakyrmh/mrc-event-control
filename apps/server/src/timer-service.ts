@@ -158,7 +158,28 @@ export class TimerService implements TimerPort {
     if (this.storageHealth === 'DEGRADED') {
       throw new Error('STORAGE_DEGRADED')
     }
-    const engine = (options?.matchId ? this.enginesByMatch.get(options.matchId) : null) ?? this.activeEngine
+    let engine = (options?.matchId ? this.enginesByMatch.get(options.matchId) : null) ?? this.activeEngine
+    if (!engine && options?.matchId) {
+      const timerRecord = await this.client.timerInstance.findFirst({
+        where: { matchId: options.matchId },
+        orderBy: { createdAt: 'desc' },
+      })
+      if (timerRecord) {
+        engine = new TimerEngine({
+          id: timerRecord.id,
+          matchId: timerRecord.matchId,
+          segmentAttemptId: timerRecord.segmentAttemptId,
+          phaseType: timerRecord.type as any,
+          initialMs: timerRecord.initialMs,
+          remainingAtAnchorMs: timerRecord.remainingAtAnchorMs,
+          clock: this.clock,
+          state: timerRecord.state as any,
+          storageHealth: this.storageHealth,
+        })
+        this.enginesByMatch.set(options.matchId, engine)
+        this.activeEngine = engine
+      }
+    }
     if (!engine) {
       throw new Error('NO_ACTIVE_TIMER_ENGINE')
     }
@@ -197,7 +218,28 @@ export class TimerService implements TimerPort {
     if (this.storageHealth === 'DEGRADED') {
       throw new Error('STORAGE_DEGRADED')
     }
-    const engine = (matchId ? this.enginesByMatch.get(matchId) : null) ?? this.activeEngine
+    let engine = (matchId ? this.enginesByMatch.get(matchId) : null) ?? this.activeEngine
+    if (!engine && matchId) {
+      const timerRecord = await this.client.timerInstance.findFirst({
+        where: { matchId },
+        orderBy: { createdAt: 'desc' },
+      })
+      if (timerRecord) {
+        engine = new TimerEngine({
+          id: timerRecord.id,
+          matchId: timerRecord.matchId,
+          segmentAttemptId: timerRecord.segmentAttemptId,
+          phaseType: timerRecord.type as any,
+          initialMs: timerRecord.initialMs,
+          remainingAtAnchorMs: timerRecord.remainingAtAnchorMs,
+          clock: this.clock,
+          state: timerRecord.state as any,
+          storageHealth: this.storageHealth,
+        })
+        this.enginesByMatch.set(matchId, engine)
+        this.activeEngine = engine
+      }
+    }
     if (!engine) {
       throw new Error('NO_ACTIVE_TIMER_ENGINE')
     }

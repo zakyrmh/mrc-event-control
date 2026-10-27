@@ -47,16 +47,20 @@ pnpm --filter server start
 pnpm --filter server typecheck
 pnpm --filter server test
 pnpm --filter server bootstrap:admin
+pnpm --filter server create:user
 ```
 
 Orkestrasi dari root:
 
 ```bash
-pnpm setup       # install + siapkan .env + prisma generate + migrate deploy
-pnpm dev         # server dan web sekaligus
-pnpm db:migrate  # terapkan migrasi Prisma
-pnpm db:admin    # bootstrap super-admin
-pnpm verify      # typecheck + test + build server + lint + build web
+pnpm setup        # install + siapkan .env + prisma generate + migrate deploy
+pnpm build        # build bundle server dan frontend web produksi
+pnpm start        # jalankan server offline produksi (Fastify melayani web + API di port 3000)
+pnpm dev          # server dan web sekaligus (mode pengembangan / dev)
+pnpm db:migrate   # terapkan migrasi Prisma
+pnpm db:admin     # bootstrap super-admin awal
+pnpm user:create  # buat/perbarui akun operator atau super-admin (minimal 12 karakter)
+pnpm verify       # typecheck + test + build server + lint + build web
 ```
 
 ## Konfigurasi Lokal
@@ -74,16 +78,107 @@ dilacak. Variabel yang dikenal:
 | `HOST`, `PORT` | tidak | Default `127.0.0.1` dan `3000`. |
 | `MRC_BOOTSTRAP_ADMIN_USERNAME`, `MRC_BOOTSTRAP_ADMIN_PASSWORD` | saat bootstrap | Hanya untuk `pnpm db:admin`; berikan lewat environment, jangan disimpan di `.env`. |
 
-Bootstrap super-admin memerlukan `DATABASE_URL`,
+Bootstrap super-admin awal memerlukan `DATABASE_URL`,
 `MRC_BOOTSTRAP_ADMIN_USERNAME`, dan `MRC_BOOTSTRAP_ADMIN_PASSWORD` unik minimal
-12 karakter. Tidak ada password bawaan; bila super-admin sudah ada, perintah tidak
-mengubah akun. Server memerlukan `DATABASE_URL`. `ALLOWED_ORIGINS` menerima daftar
+12 karakter. Untuk menambah akun operator atau admin baru kapan saja, gunakan:
+`pnpm user:create <username> <password> [OPERATOR|SUPER_ADMIN]`. Password wajib
+minimal 12 karakter (scrypt). Bila username sudah ada, perintah akan memperbarui password.
+Server memerlukan `DATABASE_URL`. `ALLOWED_ORIGINS` menerima daftar
 origin lokal dipisahkan koma. Set `COOKIE_SECURE=true` saat HTTPS digunakan;
 pengecualian HTTP hanya untuk baseline loopback dan tidak boleh diekspos ke jaringan umum.
 
 `install` memasang dependensi; perlu internet/cache saat persiapan, bukan hari acara. Pada web, `dev` menjalankan Vite, `build` memeriksa TypeScript lalu membangun frontend, `lint` menjalankan Oxlint, dan `preview` memeriksa hasil build secara lokal. Pada server, `dev` menjalankan launcher dengan watch, `build` menghasilkan `apps/server/dist`, dan `start` menjalankan hasil build. Ketiganya membaca `.env` bila tersedia dan tetap berjalan tanpanya. Laptop acara tetap harus diuji terpisah.
 
 `pnpm-workspace.yaml` mengizinkan build hanya untuk `@prisma/engines`, `better-sqlite3`, dan `esbuild`; lifecycle script `prisma` ditolak karena CLI tidak memerlukannya untuk instalasi. Root `test` masih sengaja gagal sebagai placeholder, sedangkan `server test` menjalankan unit test nyata. Launcher server ini merupakan fondasi pengembangan lokal, belum launcher hari-H atau server statis frontend/OBS. Jangan memakai Vite dev/preview sebagai server produksi. Rencana satu server lokal ada di [arsitektur](docs/02-engineering/ARCHITECTURE.md).
+
+## Panduan Deployment Server Hari-H (Mini PC / Ubuntu Bare-Metal)
+
+Deployment di venue menggunakan satu komputer server lokal (Mini PC OS Ubuntu) tanpa Docker. Seluruh antarmuka web dan API dilayani dari satu port produksi (`PORT=3000`).
+
+### 1. Prasyarat Mini PC (Koneksi Internet Awal)
+Pastikan Node.js 24, pnpm, git, dan compiler native terpasang:
+```bash
+sudo apt update && sudo apt install -y git build-essential
+corepack enable
+```
+
+### 2. Clone dan Inisialisasi
+```bash
+git clone <URL_REPO_GITHUB> mrc-x-event-control
+cd mrc-x-event-control
+pnpm setup
+```
+> `pnpm setup` otomatis mengunduh paket dependensi, mengompilasi binary SQLite (`better-sqlite3`), menyalin template `.env`, dan menerapkan migrasi database lokal.
+
+### 3. Konfigurasi Jaringan LAN (`apps/server/.env`)
+Sesuaikan file konfigurasi server agar dapat diakses oleh laptop operator di jaringan yang sama:
+```bash
+nano apps/server/.env
+```
+Atur variabel berikut:
+```env
+HOST=0.0.0.0
+PORT=3000
+ALLOWED_ORIGINS=http://192.168.1.100:3000,http://localhost:3000
+```
+*(Ganti `192.168.1.100` dengan alamat IP statis/LAN Mini PC di venue).*
+
+### 4. Build Bundle Produksi
+Sebelum server dijalankan, kompilasi frontend dan backend:
+```bash
+pnpm build
+```
+
+### 5. Buat Akun Operator & Admin
+Buat akun untuk masing-masing meja pertandingan (password minimal 12 karakter):
+```bash
+pnpm user:create superadmin SuperAdminMRC2026! SUPER_ADMIN
+pnpm user:create operator.meja1 OperatorMeja12026! OPERATOR
+pnpm user:create operator.meja2 OperatorMeja22026! OPERATOR
+```
+
+### 6. Menjalankan Server Produksi
+```bash
+pnpm start
+```
+Akses dari laptop operator atau OBS di LAN:
+```text
+http://192.168.1.100:3000/
+```
+
+### 7. Opsional: Auto-Start via Systemd
+Agar server otomatis berjalan saat Mini PC dinyalakan, buat service di `/etc/systemd/system/mrcx.service`:
+```ini
+[Unit]
+Description=MRC X 2026 Event Control
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_UBUNTU_USER
+WorkingDirectory=/path/to/mrc-x-event-control
+ExecStart=/usr/bin/pnpm start
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOST=0.0.0.0
+
+[Install]
+WantedBy=multi-user.target
+```
+Aktifkan dengan:
+```bash
+sudo systemctl daemon-reload && sudo systemctl enable --now mrcx
+```
+
+### 8. Prosedur Pembaruan Kode (Bila Ada Perubahan di Hari-H/Gladi)
+Jika terdapat commit perbaikan dari GitHub:
+```bash
+git pull
+pnpm build
+pnpm start
+```
 
 ## Kontribusi dan Keputusan Terbuka
 
