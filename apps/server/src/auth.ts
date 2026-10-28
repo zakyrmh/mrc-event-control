@@ -73,9 +73,25 @@ function clearSessionCookie(secure: boolean): string {
   return sessionCookieHeader('', secure, 0)
 }
 
+export function isLocalOrPrivateOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin)
+    const hostname = url.hostname
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return true
+    if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true
+    if (/^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true
+    if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname)) return true
+    return false
+  } catch {
+    return false
+  }
+}
+
 function originAllowed(request: FastifyRequest, allowedOrigins: readonly string[]): boolean {
   const origin = request.headers.origin
-  return typeof origin === 'string' && allowedOrigins.includes(origin)
+  if (typeof origin !== 'string') return false
+  if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) return true
+  return isLocalOrPrivateOrigin(origin)
 }
 
 function csrfMatches(request: FastifyRequest, expectedHash: string): boolean {

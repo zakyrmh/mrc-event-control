@@ -5,6 +5,7 @@ import { Server } from 'socket.io'
 
 import {
   digest,
+  isLocalOrPrivateOrigin,
   parseCookies,
   sessionCookie,
   type ControlSocketRegistry,
@@ -51,7 +52,7 @@ export function registerControlSockets(
     const rawSession = parseCookies(socket.handshake.headers.cookie).get(sessionCookie)
     if (
       typeof origin !== 'string' ||
-      !options.allowedOrigins.includes(origin) ||
+      (!options.allowedOrigins.includes('*') && !options.allowedOrigins.includes(origin) && !isLocalOrPrivateOrigin(origin)) ||
       typeof csrfToken !== 'string' ||
       rawSession === undefined
     ) {

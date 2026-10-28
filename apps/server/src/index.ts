@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs'
+import { networkInterfaces } from 'node:os'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { buildServer } from './app.js'
@@ -48,13 +49,24 @@ export async function startServer(
   const configuredOrigins = process.env.ALLOWED_ORIGINS?.split(',')
     .map((value) => value.trim())
     .filter((value) => value !== '')
+  const localIps = Object.values(networkInterfaces())
+    .flat()
+    .filter((iface): iface is NonNullable<typeof iface> => Boolean(iface && (iface.family === 'IPv4' || (iface.family as unknown) === 4)))
+    .map((iface) => iface.address)
+  const dynamicLocalOrigins = localIps.flatMap((ip) => [
+    `http://${ip}:${port}`,
+    `http://${ip}:5173`,
+    `http://${ip}:3000`,
+  ])
   const allowedOrigins = [
     ...new Set([
       `http://${host}:${port}`,
       `http://localhost:${port}`,
-      ...(configuredOrigins ?? []),
+      `http://127.0.0.1:${port}`,
       'http://127.0.0.1:5173',
       'http://localhost:5173',
+      ...dynamicLocalOrigins,
+      ...(configuredOrigins ?? []),
     ]),
   ]
   const controlSockets = new InMemoryControlSocketRegistry()
