@@ -795,6 +795,27 @@ export function OperatorDashboard() {
     await sendMatchCommand('result.finalize', { draftRevisionId: draft.id })
   }
 
+  const handleRematch = () => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Tanding Ulang Pertandingan?',
+      message:
+        'Apakah Anda yakin ingin tanding ulang? Seluruh skor, riwayat gol, dan waktu akan direset ke awal. Pertandingan akan dilepas dari arena dan kembali ke daftar antrean jadwal.',
+      confirmText: 'Ya, Tanding Ulang',
+      cancelText: 'Batal',
+      variant: 'danger',
+      requireReason: false,
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }))
+        const res = await sendMatchCommand('match.rematch', {})
+        if (res) {
+          setActiveMatch(null)
+          void refreshArena()
+        }
+      },
+    })
+  }
+
   return (
     <div className="operator-container">
       <header className="operator-header">
@@ -1355,6 +1376,14 @@ export function OperatorDashboard() {
                   >
                     Tunda Pertandingan
                   </button>
+                  <button
+                    className="btn btn-warning btn-rematch"
+                    title="match.rematch"
+                    style={{ marginLeft: '16px', background: '#d97706', color: '#fff', border: 'none' }}
+                    onClick={handleRematch}
+                  >
+                    🔄 Tanding Ulang
+                  </button>
                 </div>
               )}
             </div>
@@ -1373,35 +1402,57 @@ export function OperatorDashboard() {
                   )}
                 </h2>
 
-                <div className="controls-row">
-                  <button
-                    className="btn btn-ghost"
-                    disabled={!activeGoalIntent}
-                    onClick={() => {
-                      if (!activeGoalIntent) return
-                      setLastConsumedGoalIntentId(activeGoalIntent.id)
-                      void sendMatchCommand('goal.add', {
-                        goalIntentId: activeGoalIntent.id,
-                        side: 'A',
-                      })
-                    }}
-                  >
-                    +1 Gol Tim A ({activeMatch.teamA.name})
-                  </button>
-                  <button
-                    className="btn btn-ghost"
-                    disabled={!activeGoalIntent}
-                    onClick={() => {
-                      if (!activeGoalIntent) return
-                      setLastConsumedGoalIntentId(activeGoalIntent.id)
-                      void sendMatchCommand('goal.add', {
-                        goalIntentId: activeGoalIntent.id,
-                        side: 'B',
-                      })
-                    }}
-                  >
-                    +1 Gol Tim B ({activeMatch.teamB.name})
-                  </button>
+                <div className="controls-row" style={{ flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'inline-flex', gap: '6px' }}>
+                    <button
+                      className="btn btn-ghost btn-goal-a"
+                      disabled={!activeGoalIntent}
+                      onClick={() => {
+                        if (!activeGoalIntent) return
+                        setLastConsumedGoalIntentId(activeGoalIntent.id)
+                        void sendMatchCommand('goal.add', {
+                          goalIntentId: activeGoalIntent.id,
+                          side: 'A',
+                        })
+                      }}
+                    >
+                      +1 Gol Tim A ({activeMatch.teamA.name})
+                    </button>
+                    <button
+                      className="btn btn-outline btn-undo-a"
+                      title="Undo 1 Gol Terakhir Tim A"
+                      disabled={activeMatch.score.goalsA <= 0}
+                      style={{ color: '#dc2626', borderColor: '#fca5a5' }}
+                      onClick={() => void sendMatchCommand('goal.undo', { side: 'A' })}
+                    >
+                      ↩ Undo Gol A
+                    </button>
+                  </div>
+                  <div style={{ display: 'inline-flex', gap: '6px' }}>
+                    <button
+                      className="btn btn-ghost btn-goal-b"
+                      disabled={!activeGoalIntent}
+                      onClick={() => {
+                        if (!activeGoalIntent) return
+                        setLastConsumedGoalIntentId(activeGoalIntent.id)
+                        void sendMatchCommand('goal.add', {
+                          goalIntentId: activeGoalIntent.id,
+                          side: 'B',
+                        })
+                      }}
+                    >
+                      +1 Gol Tim B ({activeMatch.teamB.name})
+                    </button>
+                    <button
+                      className="btn btn-outline btn-undo-b"
+                      title="Undo 1 Gol Terakhir Tim B"
+                      disabled={activeMatch.score.goalsB <= 0}
+                      style={{ color: '#dc2626', borderColor: '#fca5a5' }}
+                      onClick={() => void sendMatchCommand('goal.undo', { side: 'B' })}
+                    >
+                      ↩ Undo Gol B
+                    </button>
+                  </div>
                   {!activeGoalIntent && (
                     <button
                       className="btn btn-outline"
@@ -1485,6 +1536,14 @@ export function OperatorDashboard() {
                       </button>
                     </>
                   )}
+                  <button
+                    className="btn btn-outline"
+                    title="match.rematch"
+                    style={{ marginLeft: '12px', color: '#d97706', borderColor: '#d97706' }}
+                    onClick={handleRematch}
+                  >
+                    🔄 Tanding Ulang
+                  </button>
                 </div>
 
                 {draft && (

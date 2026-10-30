@@ -25,6 +25,7 @@ export type TransitionCommand =
   | { type: 'reopen'; reason: string; authorityReference: string }
   | { type: 'refinalize'; reason: string; authorityReference: string }
   | { type: 'cancel-correction' }
+  | { type: 'rematch' }
 
 export interface TransitionResult {
   allowed: boolean
@@ -390,6 +391,21 @@ export function evaluateMatchTransition(
         allowed: true,
         targetStatus: 'COMPLETED',
         targetPhase: 'FINISHED',
+      }
+    }
+
+    case 'rematch': {
+      if (currentStatus !== 'PAUSED' && currentStatus !== 'COMPLETED' && currentP !== 'RESULT') {
+        return {
+          allowed: false,
+          errorCode: 'INVALID_TRANSITION',
+          message: 'Tanding ulang hanya dapat dilakukan saat pertandingan selesai (COMPLETED), fase keputusan (RESULT), atau dijeda (PAUSED).',
+        }
+      }
+      return {
+        allowed: true,
+        targetStatus: 'SCHEDULED',
+        targetPhase: 'PRE_MATCH',
       }
     }
 

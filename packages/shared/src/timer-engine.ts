@@ -160,6 +160,9 @@ export class TimerEngine {
     if (this.state === 'RUNNING') {
       return this.getSnapshot()
     }
+    if (this.state === 'PAUSED' && !providedToken) {
+      return this.resume()
+    }
     if (this.state !== 'IDLE' && this.state !== 'STOPPED' && this.state !== 'PAUSED') {
       throw new Error(`CANNOT_START_FROM_${this.state}`)
     }
@@ -179,6 +182,29 @@ export class TimerEngine {
     this.checkpointWallUtc = this.anchorWallUtc
     this.state = 'RUNNING'
     this.readinessToken = null // Consumed on start
+    return this.getSnapshot()
+  }
+
+  resume(): TimerSnapshot {
+    if (this.storageHealth === 'DEGRADED') {
+      throw new Error('STORAGE_DEGRADED')
+    }
+    if (this.state === 'RECOVERY_REQUIRED') {
+      throw new Error('TIMER_RECOVERY_REQUIRED')
+    }
+    if (this.state === 'RUNNING') {
+      return this.getSnapshot()
+    }
+    if (this.state !== 'PAUSED' && this.state !== 'STOPPED') {
+      throw new Error(`CANNOT_RESUME_FROM_${this.state}`)
+    }
+    if (this.remainingAtAnchorMs <= 0) {
+      throw new Error('CANNOT_START_WITH_ZERO_REMAINING')
+    }
+    this.monoAnchorMs = this.clock.nowMonoMs()
+    this.anchorWallUtc = this.clock.nowWallUtc()
+    this.checkpointWallUtc = this.anchorWallUtc
+    this.state = 'RUNNING'
     return this.getSnapshot()
   }
 

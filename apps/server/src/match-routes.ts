@@ -1296,9 +1296,13 @@ export function registerMatchRoutes(
 
         if (timerService) {
           try {
-            await timerService.start({ matchId: match.id, actorId: request.authPrincipal?.userId ?? null })
+            await timerService.resume(match.id, request.authPrincipal?.userId ?? null)
           } catch {
-            // ignore if timer not ready or mocked
+            try {
+              await timerService.start({ matchId: match.id, actorId: request.authPrincipal?.userId ?? null })
+            } catch {
+              // ignore if timer not ready or mocked
+            }
           }
         }
 
@@ -1434,6 +1438,144 @@ export function registerMatchRoutes(
           matchVersion: updatedMatch.matchVersion,
           status: updatedMatch.status,
           phase: updatedMatch.phase,
+        })
+      }
+
+      if (action === 'match.rematch') {
+        const evalRes = evaluateMatchTransition(
+          match.status as MatchStatus,
+          match.phase as MatchPhase | null,
+          { type: 'rematch' },
+          { role, hasStarted: match.hasStarted },
+        )
+        if (!evalRes.allowed) {
+          return errorResponse(reply, 409, evalRes.errorCode ?? 'INVALID_TRANSITION', evalRes.message ?? 'Tanding ulang tidak dapat dilakukan.', request.id)
+        }
+
+        const prevResults = await client.resultRevision.findMany({
+          where: { matchId: match.id },
+          orderBy: { revision: 'desc' },
+        })
+        const latestFinal = prevResults.find((r) => r.status === 'FINAL')
+        const previousWinnerId = latestFinal?.winnerTeamId
+
+        const arena = await getOrCreateArena(client)
+
+        const result = await client.$transaction(async (tx) => {
+          if (previousWinnerId) {
+            const downstreamMatches = await tx.match.findMany({
+              where: {
+                categoryId: match.categoryId,
+                stage: 'KNOCKOUT',
+                hasStarted: false,
+                status: 'SCHEDULED',
+                OR: [{ teamAId: previousWinnerId }, { teamBId: previousWinnerId }],
+              },
+            })
+            for (const dm of downstreamMatches) {
+              await tx.match.delete({ where: { id: dm.id } })
+            }
+          }
+
+          // Clear currentSegmentId first to prevent foreign key violations
+          await tx.match.update({
+            where: { id: match.id },
+            data: { currentSegmentId: null },
+          })
+
+          // Clear self-referencing goal correction foreign keys before deleting goals
+          await tx.goalEvent.updateMany({
+            where: { matchId: match.id },
+            data: { correctsGoalId: null },
+          })
+          await tx.goalEvent.deleteMany({ where: { matchId: match.id } })
+          await tx.goalIntent.deleteMany({ where: { matchId: match.id } })
+          await tx.resultRevision.deleteMany({ where: { matchId: match.id } })
+
+          await tx.segmentAttempt.deleteMany({
+            where: {
+              matchId: match.id,
+              OR: [{ ordinal: { gt: 1 } }, { attempt: { gt: 1 } }],
+            },
+          })
+          const seg1 = await tx.segmentAttempt.findFirst({
+            where: { matchId: match.id, ordinal: 1, attempt: 1 },
+          })
+          let firstSegmentId = seg1?.id ?? null
+          if (seg1) {
+            await tx.segmentAttempt.update({
+              where: { id: seg1.id },
+              data: { status: 'PREPARED' },
+            })
+          }
+
+          const timerInstance = await tx.timerInstance.findFirst({
+            where: { matchId: match.id },
+            orderBy: { createdAt: 'desc' },
+          })
+          if (timerInstance) {
+            await tx.timerInstance.update({
+              where: { id: timerInstance.id },
+              data: {
+                state: 'IDLE',
+                remainingAtAnchorMs: timerInstance.initialMs,
+                anchorWallUtc: null,
+                checkpointWallUtc: null,
+                checkpointSeq: { increment: 1 },
+              },
+            })
+          }
+
+          const updatedMatch = await tx.match.update({
+            where: { id: match.id },
+            data: {
+              status: 'SCHEDULED',
+              phase: 'PRE_MATCH',
+              hasStarted: false,
+              currentSegmentId: firstSegmentId,
+              matchVersion: { increment: 1 },
+            },
+          })
+
+          let updatedArena = arena
+          const activeArena = await tx.arenaState.findFirst({ where: { activeMatchId: match.id } })
+          if (activeArena) {
+            updatedArena = await tx.arenaState.update({
+              where: { id: activeArena.id },
+              data: { activeMatchId: null, arenaVersion: { increment: 1 } },
+            })
+          }
+
+          await tx.auditEntry.create({
+            data: {
+              id: randomUUID(),
+              action: 'match.rematch',
+              resourceType: 'Match',
+              resourceId: match.id,
+              actorId: request.authPrincipal?.userId ?? null,
+              reason: (body?.reason as string) ?? 'Tanding ulang pertandingan',
+            },
+          })
+
+          return { match: updatedMatch, arena: updatedArena }
+        })
+
+        if (timerService) {
+          timerService.clearEngine(match.id)
+        }
+
+        if (match.stage === 'KNOCKOUT') {
+          await autoSyncKnockoutProgression(client, match.categoryId)
+        }
+        if (match.stage === 'GROUP') {
+          await autoSyncGroupWinnerToBracket(client, match.categoryId)
+        }
+
+        return reply.code(200).send({
+          matchVersion: result.match.matchVersion,
+          status: result.match.status,
+          phase: result.match.phase,
+          arenaVersion: result.arena.arenaVersion,
         })
       }
 
@@ -1626,6 +1768,92 @@ export function registerMatchRoutes(
           goalIntentId: newIntent.id,
           status: newIntent.status,
           matchVersion: match.matchVersion,
+        })
+      }
+
+      if (action === 'goal.undo') {
+        const side = body?.side as 'A' | 'B'
+        if (side !== 'A' && side !== 'B') {
+          return errorResponse(reply, 422, 'INVALID_INPUT', 'side (A/B) wajib diisi.', request.id)
+        }
+
+        if (timerService && timerService.getStorageHealth() === 'DEGRADED') {
+          return errorResponse(reply, 503, 'STORAGE_DEGRADED', 'Penyimpanan terdegradasi. Undo gol ditolak.', request.id)
+        }
+
+        const isCompetition = match.phase === 'COMPETITION'
+        const isResult = match.phase === 'RESULT'
+        const isPaused = match.status === 'PAUSED'
+        if (!isCompetition && !isResult && !isPaused) {
+          return errorResponse(reply, 409, 'INVALID_TRANSITION', 'Undo gol hanya diizinkan saat pertandingan berjalan, dijeda, atau fase keputusan.', request.id)
+        }
+
+        const activeGoals = await client.goalEvent.findMany({
+          where: { matchId: match.id, side, delta: 1 },
+          include: { correctedBy: true },
+          orderBy: { createdAt: 'desc' },
+        })
+        const targetGoal = activeGoals.find((g) => g.correctedBy.length === 0)
+        if (!targetGoal) {
+          return errorResponse(reply, 404, 'NOT_FOUND', `Tidak ada gol aktif yang dapat dibatalkan untuk Tim ${side}.`, request.id)
+        }
+
+        const correctionId = randomUUID()
+        const result = await client.$transaction(async (tx) => {
+          const cancelEvent = await tx.goalEvent.create({
+            data: {
+              id: correctionId,
+              matchId: match.id,
+              segmentAttemptId: targetGoal.segmentAttemptId,
+              side: targetGoal.side,
+              delta: -1,
+              correctsGoalId: targetGoal.id,
+              logicalGoalId: targetGoal.logicalGoalId,
+              reason: (body?.reason as string) ?? 'Undo gol operator',
+              actorId: request.authPrincipal?.userId ?? null,
+            },
+          })
+
+          const readyIntent = await tx.goalIntent.findFirst({
+            where: { matchId: match.id, status: 'READY' },
+          })
+          if (!readyIntent) {
+            await tx.goalIntent.create({
+              data: {
+                id: randomUUID(),
+                matchId: match.id,
+                segmentAttemptId: targetGoal.segmentAttemptId,
+                status: 'READY',
+              },
+            })
+          }
+
+          const updatedMatch = await tx.match.update({
+            where: { id: match.id },
+            data: { matchVersion: { increment: 1 } },
+          })
+
+          await tx.auditEntry.create({
+            data: {
+              id: randomUUID(),
+              action: 'goal.undo',
+              resourceType: 'GoalEvent',
+              resourceId: correctionId,
+              actorId: request.authPrincipal?.userId ?? null,
+              beforeJson: JSON.stringify(targetGoal),
+              afterJson: JSON.stringify(cancelEvent),
+            },
+          })
+
+          const score = await calculateMatchScore(tx, match.id)
+          return { match: updatedMatch, cancelEvent, score }
+        })
+
+        return reply.code(200).send({
+          matchVersion: result.match.matchVersion,
+          correctedGoalId: targetGoal.id,
+          cancelEventId: result.cancelEvent.id,
+          score: result.score,
         })
       }
 

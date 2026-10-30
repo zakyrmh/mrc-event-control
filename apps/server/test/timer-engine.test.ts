@@ -117,6 +117,16 @@ describe('Timer Engine Service & Recovery (003 E-01 s/d E-08 / TC-05, TC-06, TC-
     assert.equal(persisted?.remainingAtAnchorMs, 280_000)
   })
 
+  it('resumes from PAUSED atomically without requiring re-arming readinessToken', async () => {
+    const resumed = await timerService.resume()
+    assert.equal(resumed.state, 'RUNNING')
+    assert.equal(resumed.remainingMs, 280_000)
+
+    const pausedAgain = await timerService.pause()
+    assert.equal(pausedAgain.state, 'PAUSED')
+    assert.equal(pausedAgain.remainingMs, 280_000)
+  })
+
   it('adjusts duration atomically and audits the delta', async () => {
     const adjusted = await timerService.adjust({
       deltaMs: 30_000,

@@ -214,6 +214,73 @@ export class TimerService implements TimerPort {
     return snapshot
   }
 
+  async resume(matchId?: string, actorId?: string | null): Promise<TimerSnapshot> {
+    if (this.storageHealth === 'DEGRADED') {
+      throw new Error('STORAGE_DEGRADED')
+    }
+    let engine = (matchId ? this.enginesByMatch.get(matchId) : null) ?? this.activeEngine
+    if (!engine && matchId) {
+      const timerRecord = await this.client.timerInstance.findFirst({
+        where: { matchId },
+        orderBy: { createdAt: 'desc' },
+      })
+      if (timerRecord) {
+        engine = new TimerEngine({
+          id: timerRecord.id,
+          matchId: timerRecord.matchId,
+          segmentAttemptId: timerRecord.segmentAttemptId,
+          phaseType: timerRecord.type as any,
+          initialMs: timerRecord.initialMs,
+          remainingAtAnchorMs: timerRecord.remainingAtAnchorMs,
+          clock: this.clock,
+          state: timerRecord.state as any,
+          storageHealth: this.storageHealth,
+        })
+        this.enginesByMatch.set(matchId, engine)
+        this.activeEngine = engine
+      }
+    }
+    if (!engine) {
+      throw new Error('NO_ACTIVE_TIMER_ENGINE')
+    }
+
+    const snapshot = engine.resume()
+
+    await this.client.$transaction(async (tx) => {
+      await tx.timerInstance.update({
+        where: { id: snapshot.id },
+        data: {
+          state: snapshot.state,
+          remainingAtAnchorMs: snapshot.remainingMs,
+          anchorWallUtc: snapshot.anchorWallUtc ? new Date(snapshot.anchorWallUtc) : null,
+          checkpointWallUtc: snapshot.checkpointWallUtc ? new Date(snapshot.checkpointWallUtc) : null,
+          checkpointSeq: snapshot.checkpointSeq,
+          runtimeId: this.runtimeId,
+        },
+      })
+
+      await tx.auditEntry.create({
+        data: {
+          id: randomUUID(),
+          action: 'timer.resume',
+          resourceType: 'TimerInstance',
+          resourceId: snapshot.id,
+          actorId: actorId ?? null,
+          afterJson: JSON.stringify(snapshot),
+        },
+      })
+    })
+
+    return snapshot
+  }
+
+  clearEngine(matchId: string): void {
+    if (this.activeEngine && this.activeEngine.getSnapshot().matchId === matchId) {
+      this.activeEngine = null
+    }
+    this.enginesByMatch.delete(matchId)
+  }
+
   async pause(matchId?: string): Promise<TimerSnapshot> {
     if (this.storageHealth === 'DEGRADED') {
       throw new Error('STORAGE_DEGRADED')

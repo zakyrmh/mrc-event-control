@@ -723,6 +723,52 @@ describe('Match Lifecycle Integration with Timer & Arena (L-04 / TC-02, TC-03, T
     assert.equal(cancelEvent?.reason, 'Pelanggaran terjadi sesaat sebelum bola masuk')
   })
 
+  it('undoes a goal via goal.undo (1-click operator undo)', async () => {
+    const undoRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: operatorSession.cookie,
+        origin,
+        'x-csrf-token': operatorSession.csrfToken,
+      },
+      payload: {
+        action: 'goal.undo',
+        side: 'A',
+        expectedMatchVersion: match1Version,
+      },
+    })
+
+    assert.equal(undoRes.statusCode, 200)
+    const data = undoRes.json()
+    assert.equal(data.score.goalsA, 0)
+    assert.equal(data.score.goalsB, 0)
+    match1Version = data.matchVersion
+
+    // Verify next goal intent is immediately READY
+    const readyIntent = await connection.client.goalIntent.findFirst({
+      where: { matchId: match1Id, status: 'READY' },
+    })
+    assert.ok(readyIntent)
+
+    // Second undo on Team A when goals = 0 fails
+    const failUndo = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: operatorSession.cookie,
+        origin,
+        'x-csrf-token': operatorSession.csrfToken,
+      },
+      payload: {
+        action: 'goal.undo',
+        side: 'A',
+        expectedMatchVersion: match1Version,
+      },
+    })
+    assert.equal(failUndo.statusCode, 404)
+  })
+
   // --- L-07: Result drafting, finalization, reopen, refinalize, cancel-correction ---
   let draftRevisionId: string
 
@@ -934,5 +980,38 @@ describe('Match Lifecycle Integration with Timer & Arena (L-04 / TC-02, TC-03, T
     })
     assert.equal(a2Res.statusCode, 200)
     assert.equal(a2Res.json().arena.id, 'arena-2')
+  })
+
+  it('resets match on rematch (match.rematch), returning it to SCHEDULED and clearing results', async () => {
+    const rematchRes = await server.inject({
+      method: 'POST',
+      url: `/api/v1/matches/${match1Id}/commands`,
+      headers: {
+        cookie: operatorSession.cookie,
+        origin,
+        'x-csrf-token': operatorSession.csrfToken,
+      },
+      payload: {
+        action: 'match.rematch',
+        expectedMatchVersion: match1Version,
+      },
+    })
+
+    assert.equal(rematchRes.statusCode, 200)
+    const data = rematchRes.json()
+    assert.equal(data.status, 'SCHEDULED')
+    assert.equal(data.phase, 'PRE_MATCH')
+
+    // Verify DB state
+    const m = await connection.client.match.findUnique({ where: { id: match1Id } })
+    assert.equal(m?.status, 'SCHEDULED')
+    assert.equal(m?.phase, 'PRE_MATCH')
+    assert.equal(m?.hasStarted, false)
+
+    const goals = await connection.client.goalEvent.findMany({ where: { matchId: match1Id } })
+    assert.equal(goals.length, 0)
+
+    const revs = await connection.client.resultRevision.findMany({ where: { matchId: match1Id } })
+    assert.equal(revs.length, 0)
   })
 })
