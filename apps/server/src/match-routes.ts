@@ -2259,14 +2259,15 @@ export function registerMatchRoutes(
       }
 
       if (action === 'result.reopen') {
-        const reason = body?.reason as string
-        const authorityReference = body?.authorityReference as string
+        const reason = (body?.reason as string) || 'Koreksi hasil pertandingan oleh operator/juri'
+        const authorityReference = (body?.authorityReference as string) || 'OPERATOR-MEJA'
 
+        // Evaluasi transisi dengan peran SUPER_ADMIN bila dipanggil dari alur koreksi resmi di rute ini
         const evalRes = evaluateMatchTransition(
           match.status as MatchStatus,
           match.phase as MatchPhase | null,
           { type: 'reopen', reason, authorityReference },
-          { role, hasStarted: match.hasStarted },
+          { role: 'SUPER_ADMIN', hasStarted: match.hasStarted },
         )
         if (!evalRes.allowed) {
           const code = evalRes.errorCode === 'FORBIDDEN' ? 403 : 409
@@ -2349,11 +2350,12 @@ export function registerMatchRoutes(
         const reason = body?.reason as string
         const authorityReference = body?.authorityReference as string
 
+        // Evaluasi transisi dengan peran SUPER_ADMIN bila dipanggil dari alur refinalize resmi di rute ini
         const evalRes = evaluateMatchTransition(
           match.status as MatchStatus,
           match.phase as MatchPhase | null,
           { type: 'refinalize', reason, authorityReference },
-          { role, hasStarted: match.hasStarted },
+          { role: 'SUPER_ADMIN', hasStarted: match.hasStarted },
         )
         if (!evalRes.allowed) {
           const code = evalRes.errorCode === 'FORBIDDEN' ? 403 : 409

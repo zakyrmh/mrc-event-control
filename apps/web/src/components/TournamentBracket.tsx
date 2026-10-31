@@ -15,7 +15,7 @@ export interface BracketMatch {
   label: string
   sequence?: number
   matchVersion?: number
-  status: 'SCHEDULED' | 'IN_PROGRESS' | 'PAUSED' | 'COMPLETED' | 'EMPTY'
+  status: 'SCHEDULED' | 'IN_PROGRESS' | 'PAUSED' | 'COMPLETED' | 'CORRECTION_PENDING' | 'EMPTY'
   teamA?: BracketParticipant | null
   teamB?: BracketParticipant | null
   sourceA?: string
@@ -98,6 +98,7 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
     const displayNameA = teamA?.name ? teamA.name : previewA ? previewA.teamName : defaultSourceA || 'TBD'
     const displayNameB = teamB?.name ? teamB.name : previewB ? previewB.teamName : defaultSourceB || 'TBD'
     const canSelect = !readOnly && m && m.status === 'SCHEDULED' && !isTbdA && !isTbdB && onSelectMatch
+    const canReviewOrFix = !readOnly && m && (m.status === 'COMPLETED' || m.status === 'CORRECTION_PENDING') && onSelectMatch
 
     return (
       <div className={`bracket-match-card ${isLive ? 'is-live' : isDone ? 'is-completed' : ''}`}>
@@ -142,10 +143,28 @@ export const TournamentBracket: React.FC<TournamentBracketProps> = ({
           <button
             type="button"
             className="btn btn-primary"
-            style={{ padding: '3px 8px', fontSize: '11px', marginTop: '2px', width: '100%' }}
+            style={{ padding: '3px 8px', fontSize: '11px', marginTop: '4px', width: '100%' }}
             onClick={() => onSelectMatch(m.id, m.matchVersion ?? 1)}
           >
             Pilih ke Meja &rarr;
+          </button>
+        )}
+
+        {canReviewOrFix && (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{
+              padding: '2px 6px',
+              fontSize: '10px',
+              marginTop: '4px',
+              width: '100%',
+              border: '1px dashed #94a3b8',
+              color: '#475569',
+            }}
+            onClick={() => onSelectMatch(m.id, m.matchVersion ?? 1)}
+          >
+            🔍 Buka di Meja (Tinjau/Koreksi)
           </button>
         )}
       </div>

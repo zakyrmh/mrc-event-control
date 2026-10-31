@@ -395,11 +395,11 @@ export function evaluateMatchTransition(
     }
 
     case 'rematch': {
-      if (currentStatus !== 'PAUSED' && currentStatus !== 'COMPLETED' && currentP !== 'RESULT') {
+      if (currentStatus !== 'PAUSED' && currentStatus !== 'COMPLETED' && currentStatus !== 'IN_PROGRESS' && currentStatus !== 'PREPARING' && currentP !== 'RESULT') {
         return {
           allowed: false,
           errorCode: 'INVALID_TRANSITION',
-          message: 'Tanding ulang hanya dapat dilakukan saat pertandingan selesai (COMPLETED), fase keputusan (RESULT), atau dijeda (PAUSED).',
+          message: 'Tanding ulang tidak dapat dilakukan pada status pertandingan saat ini.',
         }
       }
       return {

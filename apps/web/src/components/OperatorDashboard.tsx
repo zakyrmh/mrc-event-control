@@ -32,6 +32,7 @@ interface ResultRevision {
   pointsB: number | null
   decisionText: string | null
   refereeReference: string | null
+  reason?: string | null
 }
 
 interface ResultFormProps {
@@ -641,6 +642,21 @@ export function OperatorDashboard() {
 
   // --- Handlers ---
   const handleSelectMatch = async (matchId: string, expectedMatchVersion: number) => {
+    // Jika match COMPLETED atau CORRECTION_PENDING, langsung muat ke state aktif untuk ditinjau/dikoreksi
+    const targetMatch = [...scheduledMatches, ...completedMatches].find((m) => m.id === matchId)
+    if (targetMatch && (targetMatch.status === 'COMPLETED' || targetMatch.status === 'CORRECTION_PENDING')) {
+      try {
+        const mRes = await fetch(`/api/v1/matches/${matchId}`)
+        if (mRes.ok) {
+          const mData = await mRes.json()
+          setActiveMatch(mData)
+          return
+        }
+      } catch {
+        // fallback to normal flow
+      }
+    }
+
     if (!arena) return
     await sendArenaCommand('match.select', {
       matchId,
@@ -798,7 +814,35 @@ export function OperatorDashboard() {
 
   const handleFinalize = async () => {
     if (!draft) return
-    await sendMatchCommand('result.finalize', { draftRevisionId: draft.id })
+    if (activeMatch?.status === 'CORRECTION_PENDING') {
+      await sendMatchCommand('result.refinalize', {
+        draftRevisionId: draft.id,
+        reason: draft.reason || 'Penyelesaian revisi hasil resmi',
+        authorityReference: draft.refereeReference || 'OPERATOR-MEJA',
+      })
+    } else {
+      await sendMatchCommand('result.finalize', { draftRevisionId: draft.id })
+    }
+  }
+
+  const handleReopenResult = () => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Buka Revisi Hasil / Koreksi Skor?',
+      message:
+        'Hasil resmi pertandingan akan dibuka kembali ke status revisi (DRAF). Anda dapat mengubah skor, poin, dan pemenang lalu menyimpannya kembali.',
+      confirmText: 'Ya, Buka Revisi Skor',
+      cancelText: 'Batal',
+      variant: 'warning',
+      requireReason: false,
+      onConfirm: async () => {
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }))
+        await sendMatchCommand('result.reopen', {
+          reason: 'Koreksi skor / hasil resmi oleh juri/operator',
+          authorityReference: 'OPERATOR-MEJA',
+        })
+      },
+    })
   }
 
   const handleRematch = () => {
@@ -1292,7 +1336,7 @@ export function OperatorDashboard() {
 
               {/* In-progress controls (COMPETITION): Jeda dominant, Result separated by >= 16px */}
               {activeMatch.status === 'IN_PROGRESS' && activeMatch.phase === 'COMPETITION' && (
-                <div className="controls-row" style={{ alignItems: 'center' }}>
+                <div className="controls-row" style={{ alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                   <button
                     className="btn btn-warning"
                     title="match.pause"
@@ -1311,10 +1355,18 @@ export function OperatorDashboard() {
                   <button
                     className="btn btn-outline"
                     title="RESULT"
-                    style={{ marginLeft: '16px', borderColor: '#cbd5e1' }}
+                    style={{ marginLeft: '8px', borderColor: '#cbd5e1' }}
                     onClick={handleAdvanceToResult}
                   >
                     Masuk Fase Keputusan
+                  </button>
+                  <button
+                    className="btn btn-warning btn-rematch"
+                    title="match.rematch"
+                    style={{ marginLeft: 'auto', background: '#d97706', color: '#fff', border: 'none', padding: '8px 14px' }}
+                    onClick={handleRematch}
+                  >
+                    🔄 Tanding Ulang / Batal
                   </button>
                 </div>
               )}
@@ -1522,15 +1574,22 @@ export function OperatorDashboard() {
                   />
                 )}
 
-                <div className="controls-row">
+                <div className="controls-row" style={{ flexWrap: 'wrap', gap: '8px' }}>
                   {activeMatch.status !== 'COMPLETED' && (
                     <button className="btn btn-primary" onClick={handleFinalize} disabled={!draft}>
-                      Finalisasi Hasil Resmi
+                      {activeMatch.status === 'CORRECTION_PENDING' ? 'Simpan & Kunci Hasil Revisi' : 'Finalisasi Hasil Resmi'}
                     </button>
                   )}
                   {activeMatch.status === 'COMPLETED' && (
                     <>
                       <span className="status-pill success">PERTANDINGAN TELAH RESMI COMPLETED</span>
+                      <button
+                        className="btn btn-warning"
+                        style={{ background: '#0284c7', color: '#fff', border: 'none' }}
+                        onClick={handleReopenResult}
+                      >
+                        ✏️ Koreksi Skor / Buka Revisi
+                      </button>
                       <button
                         className="btn btn-primary"
                         onClick={() => {
@@ -1545,10 +1604,10 @@ export function OperatorDashboard() {
                   <button
                     className="btn btn-outline"
                     title="match.rematch"
-                    style={{ marginLeft: '12px', color: '#d97706', borderColor: '#d97706' }}
+                    style={{ marginLeft: '8px', color: '#d97706', borderColor: '#d97706' }}
                     onClick={handleRematch}
                   >
-                    🔄 Tanding Ulang
+                    🔄 Tanding Ulang / Reset
                   </button>
                 </div>
 
