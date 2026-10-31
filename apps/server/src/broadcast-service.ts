@@ -133,7 +133,11 @@ export class BroadcastService {
   async broadcastUpdate(arenaId?: string): Promise<PublicBroadcastSnapshot> {
     this.projection.bumpBroadcastRevision()
     const snapshot = await this.projection.getPublicSnapshot(arenaId)
-    this.overlayNs?.emit('match.updated', snapshot)
+    if (arenaId) {
+      this.overlayNs?.to(`arena:${arenaId}`).emit('match.updated', snapshot)
+    } else {
+      this.overlayNs?.emit('match.updated', snapshot)
+    }
     return snapshot
   }
 

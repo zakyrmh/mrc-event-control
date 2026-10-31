@@ -49,6 +49,8 @@ tester.once('listening', () => {
     const child = spawn(
       process.execPath,
       [
+        '--import',
+        'tsx',
         `--env-file-if-exists=${serverEnv}`,
         serverDist,
       ],

@@ -181,6 +181,7 @@ interface ScheduledMatch {
 const ARENAS = [
   { id: 'arena-1', label: 'Meja 1 (Arena 1)' },
   { id: 'arena-2', label: 'Meja 2 (Arena 2)' },
+  { id: 'arena-3', label: 'Meja 3 (Arena 3)' },
 ]
 
 export function OperatorDashboard() {
@@ -250,11 +251,11 @@ export function OperatorDashboard() {
     renderLatencyMs: null,
   })
 
-  // Filter jadwal per arena berdasarkan grup (Soccer & Sumo terbagi 2 arena)
+  // Filter jadwal per arena (jika showAllGroups aktif atau di arena-3, tampilkan semua)
   const isMatchInArena = useCallback(
     (m: ScheduledMatch, arenaId: string) => {
-      // Pertandingan babak gugur/final dapat dimainkan di arena mana pun
-      if (m.stage && m.stage !== 'GROUP') {
+      // Jika arena-3 atau stage babak gugur, tampilkan
+      if (arenaId === 'arena-3' || (m.stage && m.stage !== 'GROUP')) {
         return true
       }
       const catCode = (m.category?.code ?? '').toLowerCase()

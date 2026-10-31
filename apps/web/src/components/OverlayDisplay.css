@@ -1,3 +1,12 @@
+/* Make parent documents completely transparent when rendering overlay */
+:root:has(.obs-overlay-viewport),
+html:has(.obs-overlay-viewport),
+body:has(.obs-overlay-viewport),
+#root:has(.obs-overlay-viewport) {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
 /* OBS Transparent Overlay Container */
 .obs-overlay-viewport {
   width: 100vw;
