@@ -703,15 +703,18 @@ export function OperatorDashboard() {
         variant: 'warning',
         requireReason: false,
         onConfirm: async () => {
-          setConfirmModal((prev) => ({ ...prev, isOpen: false }))
-          if (arena) {
-            await sendArenaCommand('match.release', {
-              expectedArenaVersion: arena.arenaVersion,
-              expectedMatchVersion: activeMatch.matchVersion,
-              reason: 'Operator membatalkan pilihan match',
-            })
-            setActiveMatch(null)
-          }
+            setConfirmModal((prev) => ({ ...prev, isOpen: false }))
+            if (arena) {
+              const result = await sendArenaCommand('match.release', {
+                matchId: activeMatch.id,
+                expectedArenaVersion: arena.arenaVersion,
+                expectedMatchVersion: activeMatch.matchVersion,
+                reason: 'Operator membatalkan pilihan match',
+              })
+              if (result) {
+                setActiveMatch(null)
+              }
+            }
         },
       })
     } else {
