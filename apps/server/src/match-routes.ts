@@ -1345,8 +1345,14 @@ export function registerMatchRoutes(
         const reason = (body?.reason as string) ?? 'Penundaan pertandingan'
         const authorityReference = body?.authorityReference as string
 
-        const arena = await getOrCreateArena(client)
-        if (typeof expectedArenaVersion === 'number' && arena.arenaVersion !== expectedArenaVersion) {
+        const arena = await client.arenaState.findFirst({ where: { activeMatchId: match.id } })
+        if (!arena) {
+          return errorResponse(reply, 409, 'INVALID_TRANSITION', 'Match tidak aktif di arena mana pun.', request.id)
+        }
+        if (typeof expectedArenaVersion !== 'number') {
+          return errorResponse(reply, 422, 'INVALID_INPUT', 'expectedArenaVersion wajib diisi.', request.id)
+        }
+        if (arena.arenaVersion !== expectedArenaVersion) {
           return errorResponse(reply, 409, 'VERSION_CONFLICT', 'Arena version conflict.', request.id)
         }
 

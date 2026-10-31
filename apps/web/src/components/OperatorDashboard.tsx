@@ -728,6 +728,7 @@ export function OperatorDashboard() {
         onConfirm: async (reason) => {
           setConfirmModal((prev) => ({ ...prev, isOpen: false }))
           await sendMatchCommand('match.postpone', {
+            expectedArenaVersion: arena?.arenaVersion,
             reason: reason || 'Penundaan atas persetujuan operator/juri',
             authorityReference: 'OPERATOR-MEJA',
           })
@@ -766,9 +767,10 @@ export function OperatorDashboard() {
       reasonPlaceholder: 'Contoh: Kendala teknis lapangan, salah pilih jadwal, dll.',
       onConfirm: async (reason) => {
         setConfirmModal((prev) => ({ ...prev, isOpen: false }))
-        await sendMatchCommand('match.postpone', {
-          reason: reason || 'Penundaan atas persetujuan juri',
-          authorityReference: 'OPERATOR-MEJA',
+          await sendMatchCommand('match.postpone', {
+            expectedArenaVersion: arena?.arenaVersion,
+            reason: reason || 'Penundaan atas persetujuan juri',
+            authorityReference: 'OPERATOR-MEJA',
         })
         setActiveMatch(null)
       },
