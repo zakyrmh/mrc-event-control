@@ -289,8 +289,8 @@ export function OverlayDisplay({
                   timerState === 'PAUSED' ? 'paused' : isStale ? 'stale' : ''
                 }`}
               >
-                {formatTime(interpolatedMs)}
-                {timerState === 'PAUSED' && ' (PAUSED)'}
+                <span>{formatTime(interpolatedMs)}</span>
+                {timerState === 'PAUSED' && <span className="obs-timer-paused-badge">PAUSED</span>}
               </div>
             </div>
 
