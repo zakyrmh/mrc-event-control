@@ -2303,6 +2303,8 @@ export function registerMatchRoutes(
               status: 'DRAFT',
               decisionText: latestFinal.decisionText,
               winnerTeamId: latestFinal.winnerTeamId,
+              pointsA: latestFinal.pointsA,
+              pointsB: latestFinal.pointsB,
               finalGoalsA: latestFinal.finalGoalsA,
               finalGoalsB: latestFinal.finalGoalsB,
               refereeReference: latestFinal.refereeReference,

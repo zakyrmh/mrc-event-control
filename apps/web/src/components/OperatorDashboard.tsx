@@ -523,7 +523,18 @@ export function OperatorDashboard() {
           }
         }
       } else {
-        setActiveMatch(null)
+        // Pertahankan activeMatch jika sedang dalam mode peninjauan / koreksi match selesai
+        setActiveMatch((prev) => {
+          if (prev && (prev.status === 'COMPLETED' || prev.status === 'CORRECTION_PENDING')) {
+            void fetch(`/api/v1/matches/${prev.id}`)
+              .then((r) => (r.ok ? r.json() : null))
+              .then((fresh) => {
+                if (fresh) setActiveMatch(fresh)
+              })
+            return prev
+          }
+          return null
+        })
       }
 
       // Fetch categories
@@ -650,6 +661,7 @@ export function OperatorDashboard() {
         if (mRes.ok) {
           const mData = await mRes.json()
           setActiveMatch(mData)
+          window.scrollTo({ top: 0, behavior: 'smooth' })
           return
         }
       } catch {
@@ -823,6 +835,12 @@ export function OperatorDashboard() {
     } else {
       await sendMatchCommand('result.finalize', { draftRevisionId: draft.id })
     }
+    if (activeMatch) {
+      const freshRes = await fetch(`/api/v1/matches/${activeMatch.id}`)
+      if (freshRes.ok) {
+        setActiveMatch(await freshRes.json())
+      }
+    }
   }
 
   const handleReopenResult = () => {
@@ -841,6 +859,12 @@ export function OperatorDashboard() {
           reason: 'Koreksi skor / hasil resmi oleh juri/operator',
           authorityReference: 'OPERATOR-MEJA',
         })
+        if (activeMatch) {
+          const freshRes = await fetch(`/api/v1/matches/${activeMatch.id}`)
+          if (freshRes.ok) {
+            setActiveMatch(await freshRes.json())
+          }
+        }
       },
     })
   }
@@ -1556,7 +1580,7 @@ export function OperatorDashboard() {
             )}
 
             {/* Result & Finalize Card */}
-            {(activeMatch.phase === 'RESULT' || activeMatch.status === 'COMPLETED') && (
+            {(activeMatch.phase === 'RESULT' || activeMatch.status === 'COMPLETED' || activeMatch.status === 'CORRECTION_PENDING') && (
               <div className="card">
                 <h2>
                   <span>Keputusan & Hasil Resmi</span>
@@ -1868,7 +1892,8 @@ export function OperatorDashboard() {
                   <th style={{ textAlign: 'right', minWidth: '130px' }}>Tim A</th>
                   <th style={{ textAlign: 'center', width: '120px' }}>Skor / Poin</th>
                   <th style={{ textAlign: 'left', minWidth: '130px' }}>Tim B</th>
-                  <th style={{ width: '220px' }}>Hasil & Keputusan</th>
+                  <th style={{ width: '200px' }}>Hasil & Keputusan</th>
+                  <th style={{ width: '140px', textAlign: 'center' }}>Tindakan</th>
                 </tr>
               </thead>
               <tbody>
@@ -1975,6 +2000,25 @@ export function OperatorDashboard() {
                             Juri: {res.refereeReference}
                           </div>
                         )}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          style={{
+                            padding: '4px 10px',
+                            fontSize: '11px',
+                            border: '1px solid #0284c7',
+                            color: '#0284c7',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                          }}
+                          title="Buka pertandingan ini ke meja kontrol untuk koreksi skor atau tanding ulang"
+                          onClick={() => handleSelectMatch(m.id, m.matchVersion)}
+                        >
+                          🔍 Buka di Meja
+                        </button>
                       </td>
                     </tr>
                   )
