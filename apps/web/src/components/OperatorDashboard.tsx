@@ -1176,16 +1176,16 @@ export function OperatorDashboard() {
                     {formatTime(matchTimerMs)}
                   </div>
                   {activeMatch.status === 'PAUSED' && (
-                    <span className="status-pill warning" style={{ marginTop: '4px', fontWeight: 700, fontSize: '11px' }}>
+                    <span className="status-pill warning" style={{ marginTop: '2px', fontWeight: 700, fontSize: '10px', padding: '1px 6px' }}>
                       DIJEDA
                     </span>
                   )}
                 </div>
-                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                  <span className="status-pill info" title={activeMatch.phase ?? 'PRE_MATCH'}>
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '2px' }}>
+                  <span className="status-pill info" style={{ fontSize: '11px', padding: '2px 8px' }} title={activeMatch.phase ?? 'PRE_MATCH'}>
                     {formatPhase(activeMatch.phase)}
                   </span>
-                  <span className="status-pill success" title={activeMatch.status}>
+                  <span className="status-pill success" style={{ fontSize: '11px', padding: '2px 8px' }} title={activeMatch.status}>
                     {formatStatus(activeMatch.status)}
                   </span>
                 </div>
