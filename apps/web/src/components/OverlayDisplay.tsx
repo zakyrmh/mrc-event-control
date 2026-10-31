@@ -35,6 +35,7 @@ export function OverlayDisplay({
   const timerAnchorRemainingRef = useRef<number>(0)
   const timerStateRef = useRef<string>('IDLE')
   const clientInstanceIdRef = useRef<string>('')
+  const currentTimerIdRef = useRef<string | null>(null)
   const socketRef = useRef<Socket | null>(null)
 
   const effectiveArena =
@@ -94,6 +95,7 @@ export function OverlayDisplay({
 
     socket.on('state.snapshot', (data: PublicBroadcastSnapshot) => {
       setSnapshot(data)
+      currentTimerIdRef.current = data.match?.timer?.timerId ?? null
       lastHeartbeatTimeRef.current = Date.now()
       setIsStale(false)
 
@@ -116,6 +118,7 @@ export function OverlayDisplay({
 
     socket.on('match.updated', (data: PublicBroadcastSnapshot) => {
       setSnapshot(data)
+      currentTimerIdRef.current = data.match?.timer?.timerId ?? null
       lastHeartbeatTimeRef.current = Date.now()
       setIsStale(false)
 
@@ -145,6 +148,10 @@ export function OverlayDisplay({
     }) => {
       lastHeartbeatTimeRef.current = Date.now()
       setIsStale(false)
+      // Jangan timpa timer jika sync bukan milik timer pertandingan saat ini
+      if (sync.timerId && currentTimerIdRef.current && sync.timerId !== currentTimerIdRef.current) {
+        return
+      }
       syncTimerSnapshot(sync.remainingMs, sync.state)
     })
 

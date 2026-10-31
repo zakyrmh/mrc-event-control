@@ -79,13 +79,13 @@ export class ProjectionService {
 
   async getPublicSnapshot(arenaId?: string): Promise<PublicBroadcastSnapshot> {
     const serverNowUtc = new Date().toISOString()
-    let arena = arenaId ? await this.client.arenaState.findUnique({ where: { id: arenaId } }) : null
-    if (!arena?.activeMatchId) {
-      // Smart fallback: prioritize arena with an active match if none or idle specified
-      arena = (await this.client.arenaState.findFirst({ where: { activeMatchId: { not: null } } })) ?? arena
-    }
-    if (!arena) {
-      arena = await this.client.arenaState.findUnique({ where: { id: 'main' } })
+    let arena = null
+    if (arenaId) {
+      arena = await this.client.arenaState.findUnique({ where: { id: arenaId } })
+    } else {
+      // Fallback global jika klien tidak menyertakan parameter arena
+      arena = (await this.client.arenaState.findFirst({ where: { activeMatchId: { not: null } } })) ??
+        (await this.client.arenaState.findUnique({ where: { id: 'main' } }))
     }
 
     const arenaVersion = arena?.arenaVersion ?? 1

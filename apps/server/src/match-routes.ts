@@ -719,10 +719,15 @@ export function registerMatchRoutes(
     '/api/v1/matches/:id/commands',
     {
       config: { auth: { roles: ['OPERATOR', 'SUPER_ADMIN'] } },
-      onResponse: async (_request, reply) => {
+      onResponse: async (request, reply) => {
         if (reply.statusCode === 200 && broadcastService) {
           try {
-            await broadcastService.broadcastUpdate()
+            const matchId = (request.params as { id: string }).id
+            const arena = await client.arenaState.findFirst({
+              where: { activeMatchId: matchId },
+              select: { id: true },
+            })
+            await broadcastService.broadcastUpdate(arena?.id)
           } catch {
             // ignore
           }
